@@ -60,7 +60,9 @@ services:
       POSTGRES_USER: core
       POSTGRES_PWD: core
       POSTGRES_SEEDS: postgres
-    depends_on: [postgres]
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports: ["7233:7233"]
 
   opensearch:

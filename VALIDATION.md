@@ -31,3 +31,29 @@ Run `make doctor` on the target Mac after `scripts/bootstrap-macos.sh` to confir
 
 ## Important scope
 This is a production-oriented **boilerplate/foundation**, not a completed hosted platform. Infrastructure components, contracts, module boundaries and deploy paths are wired and documented. Domain implementations such as full Keycloak login flows, OpenFGA policies, PostgreSQL repositories, Kafka producers/consumers, billing providers and notification providers are intentionally extension points for the platform modules rather than fake implementations.
+
+## 2026-08-17: Phase 1 Foundation Audit
+
+Ran on a real Mac dev environment (Docker, Flutter, Terraform, kubectl, Helm all installed), so the commands the creation environment could only provide, not execute, were actually run here:
+
+### Passed
+- `make doctor`, `gofmt -l` (clean), `go vet` (per module), `go build`, `go test` — all services and `platformkit`
+- `python3 scripts/validate_config.py`, `python3 scripts/validate_contracts.py`
+- `terraform -chdir=infra/terraform validate`
+- `terraform -chdir=infra/terraform fmt -recursive -check`
+- `helm lint infra/kubernetes/charts/core-platform`
+- `make local-up` — all 13 containers healthy
+- `make flutter-get`; Next.js admin `npm install && npm run build`
+- Live smoke tests (`make smoke`) against real `core-api`/`realtime-gateway`/`worker` processes
+- Manual raw WebSocket handshake against `realtime-gateway` after wrapping its handler in `otelhttp` middleware (confirms `http.Hijacker` still passes through)
+- End-to-end OpenTelemetry trace export verified against the real collector/Tempo containers (not just build-time compilation)
+
+### Fixed during this audit
+- `infra/terraform/versions.tf`: alignment fix so `terraform fmt -check` (run in CI) passes
+- `infra/docker/docker-compose.yml`: `temporal` depended on `postgres` starting, not being ready — added `condition: service_healthy` to prevent a schema-setup crash race
+- `infra/observability/tempo.yaml` and `infra/observability/otel-collector.yaml`: OTLP receivers defaulted to binding `localhost` inside their containers, making them unreachable from other containers on the Docker network (and unreliable over IPv6 loopback even from the host) — explicitly bound both to `0.0.0.0`
+
+### Known gap, not fixed (out of scope for this pass)
+- `apps/mobile` has no `test/` directory, so `make flutter-test` fails; not currently wired into CI either. Deferred to when the mobile shell gets real screens worth testing.
+- `apps/admin`'s `next@15`/`sharp` pulls in 3 high-severity transitive advisories (postcss, libvips); the fix is a Next.js major-version bump, which is a separate, reviewable change.
+- Real PostgreSQL/Redis/Kafka client wiring (as opposed to the TCP-reachability health checks that exist today) is deferred to whichever domain module first needs it, per this file's existing scope note above.

@@ -1,30 +1,64 @@
 package main
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/binary"
-	"github.com/example/core-platform/packages/go/platformkit/config"
 	"io"
-	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+
+	"github.com/example/core-platform/packages/go/platformkit/config"
+	"github.com/example/core-platform/packages/go/platformkit/correlation"
+	"github.com/example/core-platform/packages/go/platformkit/health"
+	"github.com/example/core-platform/packages/go/platformkit/logging"
+	"github.com/example/core-platform/packages/go/platformkit/otelx"
+	"github.com/example/core-platform/packages/go/platformkit/runx"
 )
 
 const magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+const serviceName = "realtime-gateway"
 
 func main() {
 	cfg := config.Load()
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(200)
-		_, _ = w.Write([]byte(`{"status":"ok","service":"realtime-gateway"}`))
+	logger := logging.New(serviceName, cfg.Env)
+
+	if err := cfg.Validate(); err != nil {
+		logger.Error("invalid configuration", "error", err)
+		os.Exit(1)
+	}
+
+	ctx := context.Background()
+	shutdownTracing, err := otelx.Init(ctx, otelx.Config{
+		ServiceName: serviceName,
+		Environment: cfg.Env,
+		Endpoint:    cfg.OtelEndpoint,
 	})
+	if err != nil {
+		logger.Error("failed to initialise tracing", "error", err)
+		os.Exit(1)
+	}
+	defer func() { _ = shutdownTracing(context.Background()) }()
+
+	mux := http.NewServeMux()
+	// The realtime gateway has no external dependency it must gate
+	// traffic on today; readiness tracks liveness until presence/session
+	// stores are wired in Phase 10.
+	mux.HandleFunc("GET /livez", health.Live(serviceName))
+	mux.HandleFunc("GET /readyz", health.Ready(nil))
+	mux.HandleFunc("GET /healthz", health.Health(serviceName, nil))
 	mux.HandleFunc("GET /ws", ws)
-	srv := &http.Server{Addr: cfg.RealtimeAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
-	log.Printf("realtime-gateway listening on %s", cfg.RealtimeAddr)
-	log.Fatal(srv.ListenAndServe())
+
+	handler := otelx.Wrap(serviceName, correlation.Middleware(mux))
+	srv := &http.Server{Addr: cfg.RealtimeAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
+
+	if err := runx.Serve(ctx, logger, srv); err != nil {
+		logger.Error("server error", "error", err)
+		os.Exit(1)
+	}
 }
 
 func ws(w http.ResponseWriter, r *http.Request) {

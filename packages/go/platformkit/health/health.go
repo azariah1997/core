@@ -3,9 +3,12 @@ package health
 import (
 	"context"
 	"net"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/example/core-platform/packages/go/platformkit/httpx"
 )
 
 type Check struct{ Name, Address string }
@@ -14,6 +17,9 @@ type Result struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
 }
+
+// Checks probes a service's dependencies and returns their results.
+type Checks func(ctx context.Context) []Result
 
 func TCP(ctx context.Context, c Check) Result {
 	address := normalize(c.Address)
@@ -33,4 +39,54 @@ func normalize(s string) string {
 		}
 	}
 	return s
+}
+
+// Live reports that the process is alive. It never depends on external
+// systems, so orchestrators use it to decide whether to restart the
+// container.
+func Live(service string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		httpx.JSON(w, http.StatusOK, map[string]any{"status": "ok", "service": service})
+	}
+}
+
+// Ready reports whether the dependencies required to serve traffic are
+// available. Orchestrators use it to gate traffic to the instance.
+func Ready(checks Checks) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		results, ok := run(r, checks)
+		status := http.StatusOK
+		if !ok {
+			status = http.StatusServiceUnavailable
+		}
+		httpx.JSON(w, status, map[string]any{"ready": ok, "dependencies": results})
+	}
+}
+
+// Health returns an aggregated operational view combining liveness and
+// dependency status, for dashboards and manual inspection. It always
+// returns 200 so it never triggers orchestrator action on its own.
+func Health(service string, checks Checks) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		results, ok := run(r, checks)
+		httpx.JSON(w, http.StatusOK, map[string]any{
+			"status": "ok", "service": service, "ready": ok, "dependencies": results,
+		})
+	}
+}
+
+func run(r *http.Request, checks Checks) ([]Result, bool) {
+	if checks == nil {
+		return []Result{}, true
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	results := checks(ctx)
+	ok := true
+	for _, c := range results {
+		if !c.OK {
+			ok = false
+		}
+	}
+	return results, ok
 }
