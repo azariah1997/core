@@ -87,6 +87,109 @@ paths:
         '204': { description: Revoked }
         '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /tenants:
+    post:
+      operationId: createTenant
+      description: Any authenticated caller may create a tenant, becoming its owner.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateTenant' }
+      responses:
+        '201': { description: Tenant created, content: { application/json: { schema: { $ref: '#/components/schemas/Tenant' } } } }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Slug already in use for this application, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: listMyTenants
+      description: Tenants the caller is a member of.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's tenants
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Tenant' } }
+  /tenants/{id}:
+    get:
+      operationId: getTenant
+      description: Visible to members only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Tenant, content: { application/json: { schema: { $ref: '#/components/schemas/Tenant' } } } }
+        '403': { description: Not a member of this tenant, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    patch:
+      operationId: updateTenant
+      description: Requires the owner or admin role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateTenant' }
+      responses:
+        '200': { description: Updated tenant, content: { application/json: { schema: { $ref: '#/components/schemas/Tenant' } } } }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Owner or admin role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /tenants/{id}/members:
+    get:
+      operationId: listTenantMembers
+      description: Visible to members only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Tenant members
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Membership' } }
+        '403': { description: Not a member of this tenant, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      operationId: addTenantMember
+      description: Requires the owner or admin role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddMember' }
+      responses:
+        '201': { description: Membership created, content: { application/json: { schema: { $ref: '#/components/schemas/Membership' } } } }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Owner or admin role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: User is already a member, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /tenants/{id}/members/{userId}:
+    delete:
+      operationId: removeTenantMember
+      description: A member may remove themselves; removing anyone else requires the owner or admin role.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Removed }
+        '403': { description: Owner or admin role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /data/query:
     post:
       deprecated: true
@@ -212,6 +315,45 @@ components:
         locale: { type: string }
         timezone: { type: string }
         pushToken: { type: string, description: Write-only - accepted here, never echoed back. }
+    Tenant:
+      type: object
+      required: [id, appId, slug, name, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        appId: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [active, suspended] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateTenant:
+      type: object
+      required: [appId, slug, name]
+      properties:
+        appId: { type: string, format: uuid }
+        slug: { type: string, description: Lowercase alphanumeric with optional internal hyphens, unique per application. }
+        name: { type: string }
+    UpdateTenant:
+      type: object
+      description: At least one field is required.
+      properties:
+        name: { type: string }
+        status: { type: string, enum: [active, suspended] }
+    Membership:
+      type: object
+      required: [id, tenantId, userId, role, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        tenantId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        role: { type: string, enum: [owner, admin, member] }
+        createdAt: { type: string, format: date-time }
+    AddMember:
+      type: object
+      required: [userId, role]
+      properties:
+        userId: { type: string, format: uuid }
+        role: { type: string, enum: [owner, admin, member] }
     Application:
       type: object
       required: [id, slug, name, status, createdAt, updatedAt]

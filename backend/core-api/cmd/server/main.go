@@ -17,6 +17,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	"github.com/example/core-platform/backend/core-api/internal/identity/keycloak"
 	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/tenants"
+	tenantspg "github.com/example/core-platform/backend/core-api/internal/tenants/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/users"
 	userspg "github.com/example/core-platform/backend/core-api/internal/users/postgres"
 	"github.com/example/core-platform/packages/go/platformkit/config"
@@ -79,8 +81,9 @@ func main() {
 		os.Exit(1)
 	}
 	authzSvc := authz.NewService(authzpg.New(pool), openfgaProvider)
+	tenantsSvc := tenants.NewService(tenantspg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc))
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {
