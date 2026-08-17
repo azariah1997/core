@@ -53,6 +53,14 @@ Ran on a real Mac dev environment (Docker, Flutter, Terraform, kubectl, Helm all
 - `infra/docker/docker-compose.yml`: `temporal` depended on `postgres` starting, not being ready — added `condition: service_healthy` to prevent a schema-setup crash race
 - `infra/observability/tempo.yaml` and `infra/observability/otel-collector.yaml`: OTLP receivers defaulted to binding `localhost` inside their containers, making them unreachable from other containers on the Docker network (and unreliable over IPv6 loopback even from the host) — explicitly bound both to `0.0.0.0`
 
+## 2026-08-17: Phase 2 - Application Registry
+
+First real domain module: `Application` CRUD (`POST/GET/PATCH /v1/apps`, `GET /v1/apps/{id}`) with cursor pagination, slug validation/uniqueness, and `application.created`/`application.updated` events written transactionally to `outbox_events` alongside the row change (verified live: both the row and its outbox event land in the same Postgres transaction).
+
+Validated live against the real `docker-compose` Postgres, not just the in-memory fake used by unit tests: create, get, list with two-page cursor pagination, patch, duplicate-slug 409, invalid-slug 400, unknown-id 404, and the outbox rows themselves (`SELECT * FROM outbox_events`) all confirmed by hand. `data/migrations/0002_applications_registry.sql` adds the `updated_at` column the domain model needs.
+
+Environment/ApplicationVersion/ApplicationConfiguration (also named in the Phase 2 roadmap) are intentionally deferred - documented as such in `backend/core-api/internal/applications/README.md` - since no consumer needs them yet and the roadmap itself only specifies concrete endpoints for `Application`.
+
 ### Known gap, not fixed (out of scope for this pass)
 - `apps/mobile` has no `test/` directory, so `make flutter-test` fails; not currently wired into CI either. Deferred to when the mobile shell gets real screens worth testing.
 - `apps/admin`'s `next@15`/`sharp` pulls in 3 high-severity transitive advisories (postcss, libvips); the fix is a Next.js major-version bump, which is a separate, reviewable change.

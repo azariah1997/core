@@ -7,9 +7,12 @@ import (
 	"time"
 
 	"github.com/example/core-platform/backend/core-api/internal/api"
+	"github.com/example/core-platform/backend/core-api/internal/applications"
+	"github.com/example/core-platform/backend/core-api/internal/applications/postgres"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
+	"github.com/example/core-platform/packages/go/platformkit/pg"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
 )
 
@@ -36,7 +39,16 @@ func main() {
 	}
 	defer func() { _ = shutdownTracing(context.Background()) }()
 
-	handler := otelx.Wrap(serviceName, api.New(cfg))
+	pool, err := pg.Connect(ctx, cfg.PostgresDSN)
+	if err != nil {
+		logger.Error("failed to connect to postgres", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	apps := applications.NewService(postgres.New(pool))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

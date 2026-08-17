@@ -17,7 +17,55 @@ channels:
             source: { type: string }
             occurredAt: { type: string, format: date-time }
             data: { type: object }
+  applicationCreated:
+    address: application.created.v1
+    messages:
+      applicationCreated:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: application.created }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, slug, name, status]
+              properties:
+                id: { type: string }
+                slug: { type: string }
+                name: { type: string }
+                status: { type: string, enum: [active, inactive, archived] }
+  applicationUpdated:
+    address: application.updated.v1
+    messages:
+      applicationUpdated:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: application.updated }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, slug, name, status]
+              properties:
+                id: { type: string }
+                slug: { type: string }
+                name: { type: string }
+                status: { type: string, enum: [active, inactive, archived] }
 operations:
   publishUserCreated:
     action: send
     channel: { $ref: '#/channels/userCreated' }
+  publishApplicationCreated:
+    action: send
+    channel: { $ref: '#/channels/applicationCreated' }
+  publishApplicationUpdated:
+    action: send
+    channel: { $ref: '#/channels/applicationUpdated' }

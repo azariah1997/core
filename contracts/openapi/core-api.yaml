@@ -21,3 +21,82 @@ paths:
       description: Intentionally unsupported. Products must use domain contracts instead of generic database access.
       responses:
         '501': { description: Generic DB query disabled }
+  /apps:
+    post:
+      operationId: createApplication
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApplication' }
+      responses:
+        '201': { description: Application created, content: { application/json: { schema: { $ref: '#/components/schemas/Application' } } } }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Slug already in use, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: listApplications
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: cursor, in: query, schema: { type: string }, description: Opaque cursor from a previous response's nextCursor. }
+      responses:
+        '200':
+          description: A page of applications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Application' } }
+                  nextCursor: { type: string, description: Empty when there is no further page. }
+  /apps/{id}:
+    get:
+      operationId: getApplication
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Application, content: { application/json: { schema: { $ref: '#/components/schemas/Application' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    patch:
+      operationId: updateApplication
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateApplication' }
+      responses:
+        '200': { description: Updated application, content: { application/json: { schema: { $ref: '#/components/schemas/Application' } } } }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+components:
+  schemas:
+    Application:
+      type: object
+      required: [id, slug, name, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        slug: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [active, inactive, archived] }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateApplication:
+      type: object
+      required: [slug, name]
+      properties:
+        slug: { type: string, description: Lowercase alphanumeric with optional internal hyphens. }
+        name: { type: string }
+    UpdateApplication:
+      type: object
+      description: At least one field is required.
+      properties:
+        name: { type: string }
+        status: { type: string, enum: [active, inactive, archived] }
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        correlationId: { type: string }
