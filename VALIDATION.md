@@ -61,6 +61,16 @@ Validated live against the real `docker-compose` Postgres, not just the in-memor
 
 Environment/ApplicationVersion/ApplicationConfiguration (also named in the Phase 2 roadmap) are intentionally deferred - documented as such in `backend/core-api/internal/applications/README.md` - since no consumer needs them yet and the roadmap itself only specifies concrete endpoints for `Application`.
 
+## 2026-08-17: Phase 3 - Identity
+
+`Provider` interface (`ValidateToken`/`CreateIdentity`/`DisableIdentity`/`GetIdentity`) with a real Keycloak-backed implementation - JWKS-verified JWT validation, plus all three admin operations against Keycloak's real Admin REST API (not stubs). Platform-side `identities` linkage table records `(provider, providerSubject)` -> status/`last_login_at`, atomically upserted on every authenticated request so "validate" and "remember this login" can't happen separately.
+
+Since the Keycloak container had no working realm before this (`JWT_ISSUER` pointed at `realms/core`, which didn't exist - only the default `master` realm did), added `infra/keycloak/realm-core.json`, imported via `--import-realm` on every `make local-up` (Keycloak's dev storage has no persistent volume, so this isn't a one-time migration - it's expected to run every restart). Hit and fixed a real Keycloak 26 gotcha along the way: `VERIFY_PROFILE` is enabled at the realm level by default and blocks the password grant with an opaque "Account is not fully set up" error even when the user's own `requiredActions` list is empty; had to explicitly disable it in the realm import.
+
+Validated fully live, not just against the in-memory fake: minted a real token from Keycloak's token endpoint, confirmed `GET /v1/identity/me` returns 401 with no token / a garbage token and 200 with the real one, confirmed the `identities` row lands in Postgres with the correct `provider_subject`, confirmed a second call reuses the same row rather than duplicating it, and separately exercised `CreateIdentity`/`GetIdentity`/`DisableIdentity` end-to-end against the real Keycloak Admin API (create a user, fetch it, disable it, confirm `enabled: false` on re-fetch) via a throwaway verification program (not committed - Admin-API-backed methods aren't wired to an HTTP route yet, so there's nothing in the default test suite that would exercise them against a live Keycloak).
+
+`users.identity_subject` (from the original `0001_core.sql` scaffold) is superseded by the new `identities` table but intentionally left alone - dropping/renaming it is a non-additive schema change with no current reader depending on the new table yet, per this repo's "prefer additive changes" migration rule.
+
 ### Known gap, not fixed (out of scope for this pass)
 - `apps/mobile` has no `test/` directory, so `make flutter-test` fails; not currently wired into CI either. Deferred to when the mobile shell gets real screens worth testing.
 - `apps/admin`'s `next@15`/`sharp` pulls in 3 high-severity transitive advisories (postcss, libvips); the fix is a Next.js major-version bump, which is a separate, reviewable change.

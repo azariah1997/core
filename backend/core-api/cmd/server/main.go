@@ -8,7 +8,10 @@ import (
 
 	"github.com/example/core-platform/backend/core-api/internal/api"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
-	"github.com/example/core-platform/backend/core-api/internal/applications/postgres"
+	applicationspg "github.com/example/core-platform/backend/core-api/internal/applications/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/identity"
+	"github.com/example/core-platform/backend/core-api/internal/identity/keycloak"
+	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
@@ -46,9 +49,22 @@ func main() {
 	}
 	defer pool.Close()
 
-	apps := applications.NewService(postgres.New(pool))
+	apps := applications.NewService(applicationspg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps))
+	keycloakProvider, err := keycloak.New(ctx, keycloak.Config{
+		BaseURL:       cfg.KeycloakURL,
+		Realm:         cfg.KeycloakRealm,
+		Audience:      cfg.JWTAudience,
+		AdminUsername: cfg.KeycloakAdminUsername,
+		AdminPassword: cfg.KeycloakAdminPassword,
+	})
+	if err != nil {
+		logger.Error("failed to initialise keycloak identity provider", "error", err)
+		os.Exit(1)
+	}
+	identitySvc := identity.NewService("keycloak", keycloakProvider, identitypg.New(pool))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

@@ -8,12 +8,18 @@ import (
 	"testing"
 
 	"github.com/example/core-platform/backend/core-api/internal/applications"
-	"github.com/example/core-platform/backend/core-api/internal/applications/memory"
+	applicationsmemory "github.com/example/core-platform/backend/core-api/internal/applications/memory"
+	"github.com/example/core-platform/backend/core-api/internal/identity"
+	identitymemory "github.com/example/core-platform/backend/core-api/internal/identity/memory"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 )
 
 func newTestHandler() http.Handler {
-	return New(config.Load(), applications.NewService(memory.New()))
+	return New(
+		config.Load(),
+		applications.NewService(applicationsmemory.New()),
+		identity.NewService("fake", identitymemory.Provider{}, identitymemory.New()),
+	)
 }
 
 func TestLiveness(t *testing.T) {

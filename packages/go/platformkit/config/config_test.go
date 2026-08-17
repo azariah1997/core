@@ -24,6 +24,7 @@ func TestValidatePassesWhenProductionConfigOverridden(t *testing.T) {
 	c.PostgresDSN = "postgres://prod-user:secret@prod-host:5432/core"
 	c.RedisAddr = "prod-redis:6379"
 	c.KeycloakURL = "https://auth.example.com"
+	c.KeycloakAdminPassword = "real-admin-secret"
 	c.JWTIssuer = "https://auth.example.com/realms/core"
 	c.S3SecretKey = "real-secret"
 	c.KafkaBrokers = []string{"prod-kafka:9092"}

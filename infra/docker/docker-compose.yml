@@ -38,10 +38,12 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.3
-    command: start-dev
+    command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    volumes:
+      - ../keycloak/realm-core.json:/opt/keycloak/data/import/realm-core.json:ro
     ports: ["8081:8080"]
 
   openfga:

@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/example/core-platform/backend/core-api/internal/applications"
+	"github.com/example/core-platform/backend/core-api/internal/identity"
 	"github.com/example/core-platform/packages/go/platformkit/apperr"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
@@ -14,7 +15,7 @@ import (
 
 const serviceName = "core-api"
 
-func New(cfg config.Config, apps *applications.Service) http.Handler {
+func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /livez", health.Live(serviceName))
@@ -22,6 +23,7 @@ func New(cfg config.Config, apps *applications.Service) http.Handler {
 	mux.HandleFunc("GET /healthz", health.Health(serviceName, dependencyChecks(cfg)))
 
 	applications.RegisterRoutes(mux, apps)
+	identity.RegisterRoutes(mux, identitySvc)
 
 	mux.HandleFunc("GET /v1/platform", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, 200, map[string]any{"name": cfg.PlatformName, "environment": cfg.Env, "apiVersion": "v1"})

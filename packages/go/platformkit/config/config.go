@@ -17,9 +17,12 @@ type Config struct {
 	RedisAddr    string
 	KafkaBrokers []string
 
-	KeycloakURL  string
-	OpenFGAURL   string
-	TemporalAddr string
+	KeycloakURL           string
+	KeycloakRealm         string
+	KeycloakAdminUsername string
+	KeycloakAdminPassword string
+	OpenFGAURL            string
+	TemporalAddr          string
 
 	S3Endpoint  string
 	S3Bucket    string
@@ -45,9 +48,12 @@ func Load() Config {
 		RedisAddr:    env("REDIS_ADDR", "localhost:6379"),
 		KafkaBrokers: strings.Split(env("KAFKA_BROKERS", "localhost:9092"), ","),
 
-		KeycloakURL:  env("KEYCLOAK_URL", "http://localhost:8081"),
-		OpenFGAURL:   env("OPENFGA_URL", "http://localhost:8082"),
-		TemporalAddr: env("TEMPORAL_ADDR", "localhost:7233"),
+		KeycloakURL:           env("KEYCLOAK_URL", "http://localhost:8081"),
+		KeycloakRealm:         env("KEYCLOAK_REALM", "core"),
+		KeycloakAdminUsername: env("KEYCLOAK_ADMIN_USERNAME", "admin"),
+		KeycloakAdminPassword: env("KEYCLOAK_ADMIN_PASSWORD", "admin"),
+		OpenFGAURL:            env("OPENFGA_URL", "http://localhost:8082"),
+		TemporalAddr:          env("TEMPORAL_ADDR", "localhost:7233"),
 
 		S3Endpoint:  env("S3_ENDPOINT", "http://localhost:9000"),
 		S3Bucket:    env("S3_BUCKET", "core-platform"),
@@ -78,6 +84,7 @@ func (c Config) Validate() error {
 	check("POSTGRES_DSN", c.PostgresDSN, "postgres://core:core@localhost:5432/core?sslmode=disable")
 	check("REDIS_ADDR", c.RedisAddr, "localhost:6379")
 	check("KEYCLOAK_URL", c.KeycloakURL, "http://localhost:8081")
+	check("KEYCLOAK_ADMIN_PASSWORD", c.KeycloakAdminPassword, "admin")
 	check("JWT_ISSUER", c.JWTIssuer, "http://localhost:8081/realms/core")
 	check("S3_SECRET_KEY", c.S3SecretKey, "minio123")
 	if len(c.KafkaBrokers) == 0 || c.KafkaBrokers[0] == "localhost:9092" {
