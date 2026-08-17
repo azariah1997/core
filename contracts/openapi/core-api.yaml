@@ -35,7 +35,7 @@ paths:
   /users/{id}:
     get:
       operationId: getUser
-      description: Visible to any authenticated caller today; resource-scoped permissions land in Phase 6.
+      description: Visible to the user themselves or a platform.admin. Fine-grained relationship-based visibility (e.g. via a real connection between users) lands in Phase 8.
       security:
         - bearerAuth: []
       parameters:
@@ -43,6 +43,7 @@ paths:
       responses:
         '200': { description: User, content: { application/json: { schema: { $ref: '#/components/schemas/User' } } } }
         '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Not allowed to view this user, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /users/me/devices:
     post:

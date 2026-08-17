@@ -25,16 +25,27 @@ func FromContext(ctx context.Context) (User, bool) {
 	return u, ok
 }
 
+// AccessChecker decides whether one user may view another's profile - the
+// one thing GET /v1/users/{id} needs from authz. Declared here, satisfied
+// structurally by an adapter in internal/api, so this package never
+// imports authz or knows its resource-type vocabulary; the actual policy
+// (self access, platform.admin, any future relationship-based grant) is
+// entirely authz's decision, not this package's.
+type AccessChecker interface {
+	CanViewProfile(ctx context.Context, subjectUserID, targetUserID string) (bool, error)
+}
+
 // RegisterRoutes wires the User endpoints. requireUser must resolve the
 // caller's own User (provisioning one on first login) and attach it via
-// WithUser before calling next; requireAuth only needs the caller to be
-// authenticated, since GET /v1/users/{id} is about a possibly-different
-// user. This package defines neither middleware - composing identity with
-// users is the api package's job, not a users concern.
-func RegisterRoutes(mux *http.ServeMux, svc *Service, requireUser, requireAuth func(http.Handler) http.Handler) {
+// WithUser before calling next - used for every route here, including
+// GET /v1/users/{id}, since deciding whether to allow viewing someone
+// else's profile needs to know who's asking. This package defines no
+// middleware itself - composing identity with users is the api package's
+// job, not a users concern.
+func RegisterRoutes(mux *http.ServeMux, svc *Service, requireUser func(http.Handler) http.Handler, access AccessChecker) {
 	mux.Handle("GET /v1/users/me", requireUser(http.HandlerFunc(meHandler)))
 	mux.Handle("PATCH /v1/users/me", requireUser(updateMeHandler(svc)))
-	mux.Handle("GET /v1/users/{id}", requireAuth(getHandler(svc)))
+	mux.Handle("GET /v1/users/{id}", requireUser(getHandler(svc, access)))
 }
 
 type userResponse struct {
@@ -96,9 +107,26 @@ func updateMeHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
-func getHandler(svc *Service) http.HandlerFunc {
+func getHandler(svc *Service, access AccessChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		u, err := svc.Get(r.Context(), r.PathValue("id"))
+		caller, ok := FromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "user missing from context"))
+			return
+		}
+		targetID := r.PathValue("id")
+
+		allowed, err := access.CanViewProfile(r.Context(), caller.ID, targetID)
+		if err != nil {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "authorization check failed"))
+			return
+		}
+		if !allowed {
+			apperr.Write(w, r, apperr.New(apperr.CodeAccessDenied, "not allowed to view this user"))
+			return
+		}
+
+		u, err := svc.Get(r.Context(), targetID)
 		if err != nil {
 			writeDomainError(w, r, err)
 			return

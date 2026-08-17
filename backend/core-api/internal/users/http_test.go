@@ -23,7 +23,15 @@ func fixedUser(u users.User) func(http.Handler) http.Handler {
 	}
 }
 
-func passthrough(next http.Handler) http.Handler { return next }
+// fakeAccess is a stand-in for the api package's real authz-backed
+// AccessChecker - these tests exercise the HTTP handlers, not
+// authorization policy itself (that's tested where the real policy lives,
+// in internal/api).
+type fakeAccess struct{ allow bool }
+
+func (f fakeAccess) CanViewProfile(ctx context.Context, subjectUserID, targetUserID string) (bool, error) {
+	return f.allow, nil
+}
 
 func TestMeReturnsAttachedUser(t *testing.T) {
 	svc := newService()
@@ -33,7 +41,7 @@ func TestMeReturnsAttachedUser(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	users.RegisterRoutes(mux, svc, fixedUser(u), passthrough)
+	users.RegisterRoutes(mux, svc, fixedUser(u), fakeAccess{allow: true})
 
 	req := httptest.NewRequest("GET", "/v1/users/me", nil)
 	rr := httptest.NewRecorder()
@@ -59,7 +67,7 @@ func TestPatchMeUpdatesDisplayName(t *testing.T) {
 	}
 
 	mux := http.NewServeMux()
-	users.RegisterRoutes(mux, svc, fixedUser(u), passthrough)
+	users.RegisterRoutes(mux, svc, fixedUser(u), fakeAccess{allow: true})
 
 	req := httptest.NewRequest("PATCH", "/v1/users/me", strings.NewReader(`{"displayName":"Ada Lovelace"}`))
 	rr := httptest.NewRecorder()
@@ -79,8 +87,13 @@ func TestPatchMeUpdatesDisplayName(t *testing.T) {
 
 func TestGetByIDReturns404ForUnknownUser(t *testing.T) {
 	svc := newService()
+	caller, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Caller"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
 	mux := http.NewServeMux()
-	users.RegisterRoutes(mux, svc, passthrough, passthrough)
+	users.RegisterRoutes(mux, svc, fixedUser(caller), fakeAccess{allow: true})
 
 	req := httptest.NewRequest("GET", "/v1/users/11111111-1111-1111-1111-111111111111", nil)
 	rr := httptest.NewRecorder()
@@ -93,19 +106,46 @@ func TestGetByIDReturns404ForUnknownUser(t *testing.T) {
 
 func TestGetByIDReturnsExistingUser(t *testing.T) {
 	svc := newService()
-	u, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Ada"})
+	caller, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Caller"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	target, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Target"})
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	mux := http.NewServeMux()
-	users.RegisterRoutes(mux, svc, passthrough, passthrough)
+	users.RegisterRoutes(mux, svc, fixedUser(caller), fakeAccess{allow: true})
 
-	req := httptest.NewRequest("GET", "/v1/users/"+u.ID, nil)
+	req := httptest.NewRequest("GET", "/v1/users/"+target.ID, nil)
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGetByIDDeniedByAccessCheckerReturns403(t *testing.T) {
+	svc := newService()
+	caller, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Caller"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	target, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Target"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	users.RegisterRoutes(mux, svc, fixedUser(caller), fakeAccess{allow: false})
+
+	req := httptest.NewRequest("GET", "/v1/users/"+target.ID, nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationsmemory "github.com/example/core-platform/backend/core-api/internal/applications/memory"
+	"github.com/example/core-platform/backend/core-api/internal/authz"
+	authzmemory "github.com/example/core-platform/backend/core-api/internal/authz/memory"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicesmemory "github.com/example/core-platform/backend/core-api/internal/devices/memory"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
@@ -25,6 +28,7 @@ func newTestHandler() http.Handler {
 		identity.NewService("fake", identitymemory.Provider{}, identitymemory.New()),
 		users.NewService(usersmemory.New()),
 		devices.NewService(devicesmemory.New()),
+		authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider()),
 	)
 }
 
@@ -180,29 +184,95 @@ func TestPatchMeRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestGetUserByIDRequiresAuthButNotOwnership(t *testing.T) {
+func provisionUser(t *testing.T, handler http.Handler, token string) string {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/v1/users/me", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	var body map[string]any
+	if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
+		t.Fatalf("decode provisioned user: %v", err)
+	}
+	id, _ := body["id"].(string)
+	if id == "" {
+		t.Fatalf("expected a provisioned user id, got body %v", body)
+	}
+	return id
+}
+
+func TestGetUserByIDRequiresAuth(t *testing.T) {
 	handler := newTestHandler()
+	otherUserID := provisionUser(t, handler, "someone-else")
 
-	provision := httptest.NewRequest("GET", "/v1/users/me", nil)
-	provision.Header.Set("Authorization", "Bearer someone-else")
-	provisionRR := httptest.NewRecorder()
-	handler.ServeHTTP(provisionRR, provision)
-	var provisioned map[string]any
-	_ = json.NewDecoder(provisionRR.Body).Decode(&provisioned)
-	otherUserID := provisioned["id"].(string)
+	req := httptest.NewRequest("GET", "/v1/users/"+otherUserID, nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != 401 {
+		t.Fatalf("expected 401 without auth, got %d", rr.Code)
+	}
+}
 
-	unauth := httptest.NewRequest("GET", "/v1/users/"+otherUserID, nil)
-	unauthRR := httptest.NewRecorder()
-	handler.ServeHTTP(unauthRR, unauth)
-	if unauthRR.Code != 401 {
-		t.Fatalf("expected 401 without auth, got %d", unauthRR.Code)
+func TestGetUserByIDAllowsSelfAccess(t *testing.T) {
+	handler := newTestHandler()
+	ownID := provisionUser(t, handler, "newcomer")
+
+	req := httptest.NewRequest("GET", "/v1/users/"+ownID, nil)
+	req.Header.Set("Authorization", "Bearer newcomer")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("expected 200 viewing own profile via /v1/users/{id}, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestGetUserByIDDeniesCrossUserAccessWithoutRole(t *testing.T) {
+	handler := newTestHandler()
+	otherUserID := provisionUser(t, handler, "someone-else")
+	provisionUser(t, handler, "newcomer")
+
+	req := httptest.NewRequest("GET", "/v1/users/"+otherUserID, nil)
+	req.Header.Set("Authorization", "Bearer newcomer")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != 403 {
+		t.Fatalf("expected 403 viewing another user's profile without a role, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var body map[string]any
+	_ = json.NewDecoder(rr.Body).Decode(&body)
+	if body["code"] != "ACCESS_DENIED" {
+		t.Fatalf("expected ACCESS_DENIED envelope, got %v", body)
+	}
+}
+
+// TestGetUserByIDAllowsPlatformAdminCrossUserAccess is the Phase 6 seam:
+// RBAC (platform.admin) and the fine-grained provider (OpenFGA in
+// production, the in-memory fake here) combine through authz.Service to
+// grant access no plain authenticated caller has.
+func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
+	roles := authzmemory.NewRoleRepository()
+	authzSvc := authz.NewService(roles, authzmemory.NewProvider())
+	handler := New(
+		config.Load(),
+		applications.NewService(applicationsmemory.New()),
+		identity.NewService("fake", identitymemory.Provider{}, identitymemory.New()),
+		users.NewService(usersmemory.New()),
+		devices.NewService(devicesmemory.New()),
+		authzSvc,
+	)
+
+	otherUserID := provisionUser(t, handler, "someone-else")
+	adminID := provisionUser(t, handler, "admin-user")
+
+	if err := authzSvc.AssignRole(context.Background(), adminID, authz.RolePlatformAdmin); err != nil {
+		t.Fatalf("assign role: %v", err)
 	}
 
-	authed := httptest.NewRequest("GET", "/v1/users/"+otherUserID, nil)
-	authed.Header.Set("Authorization", "Bearer newcomer")
-	authedRR := httptest.NewRecorder()
-	handler.ServeHTTP(authedRR, authed)
-	if authedRR.Code != 200 {
-		t.Fatalf("expected any authenticated caller to view another user's profile pending Phase 6 authorization, got %d", authedRR.Code)
+	req := httptest.NewRequest("GET", "/v1/users/"+otherUserID, nil)
+	req.Header.Set("Authorization", "Bearer admin-user")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != 200 {
+		t.Fatalf("expected 200 for a platform.admin viewing another user's profile, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

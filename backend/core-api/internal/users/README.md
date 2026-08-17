@@ -12,14 +12,14 @@ The platform person/account - deliberately separate from Identity ("who authenti
 ## Non-responsibilities
 
 - `UserPreferences` (notification opt-outs, quiet hours, etc.) is named in the platform roadmap but has no concrete fields specified anywhere yet - it's introduced when Notifications (Phase 12) actually needs it, not invented speculatively here.
-- Does not decide who may view another user's profile - `GET /v1/users/{id}` requires authentication today, nothing more; resource-scoped permissions are Phase 6's job.
-- Does not import `identity` at all. `EnsureForIdentity` takes primitive values (an identity ID, an optional already-linked user ID, a suggested display name) and a small `IdentityLinker` interface it defines itself - satisfied structurally by `identity.Service`, wired only in `internal/api`, so this package stays independently understandable without needing to know Identity exists.
+- Does not decide who may view another user's profile itself - `GET /v1/users/{id}` calls an `AccessChecker` it defines but doesn't implement (see below); the actual policy (self access, `platform.admin`, and eventually relationship-based access from Phase 8) is `internal/api`'s and `authz`'s decision, per the platform's non-negotiable rule that domain modules never implement permission logic independently.
+- Does not import `identity` or `authz` at all. `EnsureForIdentity` takes primitive values plus a small `IdentityLinker` interface it defines itself (satisfied structurally by `identity.Service`); `AccessChecker` is the analogous pattern toward `authz.Service`. Both are wired only in `internal/api`, so this package stays independently understandable without needing to know either exists.
 
 ## Layout
 
 - `domain.go` - `User`, `Repository` interface, validation.
 - `service.go` - `Service`, including `EnsureForIdentity`.
-- `http.go` - `GET/PATCH /v1/users/me`, `GET /v1/users/{id}`. Takes its `requireUser`/`requireAuth` middleware as parameters rather than building them, since composing identity with users is `internal/api`'s job (see `session.go` there), not this package's.
+- `http.go` - `GET/PATCH /v1/users/me`, `GET /v1/users/{id}`. Takes `requireUser` middleware and an `AccessChecker` as parameters rather than building them, since composing identity/authz with users is `internal/api`'s job (see `session.go` and `authz_adapter.go` there), not this package's.
 - `postgres/` - the production `Repository`.
 - `memory/` - in-memory `Repository` for tests.
 

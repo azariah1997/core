@@ -9,6 +9,9 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/api"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationspg "github.com/example/core-platform/backend/core-api/internal/applications/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/authz"
+	"github.com/example/core-platform/backend/core-api/internal/authz/openfga"
+	authzpg "github.com/example/core-platform/backend/core-api/internal/authz/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicespg "github.com/example/core-platform/backend/core-api/internal/devices/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
@@ -70,7 +73,14 @@ func main() {
 	usersSvc := users.NewService(userspg.New(pool))
 	devicesSvc := devices.NewService(devicespg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc))
+	openfgaProvider, err := openfga.New(ctx, openfga.Config{APIURL: cfg.OpenFGAURL})
+	if err != nil {
+		logger.Error("failed to initialise openfga authorization provider", "error", err)
+		os.Exit(1)
+	}
+	authzSvc := authz.NewService(authzpg.New(pool), openfgaProvider)
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {
