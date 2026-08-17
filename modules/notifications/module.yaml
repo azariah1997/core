@@ -1,0 +1,6 @@
+name: notifications
+owner: platform
+lifecycle: experimental
+dependencies:
+  - users
+  - configuration

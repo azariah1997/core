@@ -1,0 +1,12 @@
+app:
+  title: Core Platform
+  baseUrl: http://localhost:7007
+organization:
+  name: Core Platform
+backend:
+  baseUrl: http://localhost:7007
+  listen: { port: 7007 }
+catalog:
+  locations:
+    - type: file
+      target: ../../catalog/system.yaml

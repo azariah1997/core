@@ -1,0 +1,6 @@
+name: content
+owner: platform
+lifecycle: experimental
+dependencies:
+  - users
+  - access

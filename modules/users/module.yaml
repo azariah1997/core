@@ -1,0 +1,5 @@
+name: users
+owner: platform
+lifecycle: experimental
+dependencies:
+  - identity

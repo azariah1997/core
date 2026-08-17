@@ -1,0 +1,23 @@
+openapi: 3.1.0
+info:
+  title: Core Platform API
+  version: 1.0.0
+servers:
+  - url: /v1
+paths:
+  /platform:
+    get:
+      operationId: getPlatform
+      responses:
+        '200': { description: Platform metadata }
+  /users/me:
+    get:
+      operationId: getCurrentUser
+      responses:
+        '200': { description: Current platform user }
+  /data/query:
+    post:
+      deprecated: true
+      description: Intentionally unsupported. Products must use domain contracts instead of generic database access.
+      responses:
+        '501': { description: Generic DB query disabled }

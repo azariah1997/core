@@ -1,0 +1,1 @@
+{"name":"core-platform-backstage","private":true,"version":"0.1.0","scripts":{"note":"echo 'Generate a Backstage app here using the current Backstage CLI, then keep platform/catalog as the source catalog.'"}}

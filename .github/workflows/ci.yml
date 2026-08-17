@@ -1,0 +1,36 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with: { go-version: '1.23.x' }
+      - run: gofmt -w backend packages/go && git diff --exit-code
+      - run: go test ./backend/core-api/... ./backend/realtime-gateway/... ./backend/worker/... ./packages/go/platformkit/...
+      - run: go build ./backend/core-api/... ./backend/realtime-gateway/... ./backend/worker/... ./packages/go/platformkit/...
+      - run: python3 scripts/validate_config.py
+      - run: python3 scripts/validate_contracts.py
+  admin:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: apps/admin } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm install
+      - run: npm run build
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=infra/terraform fmt -recursive -check
+      - run: terraform -chdir=infra/terraform init -backend=false
+      - run: terraform -chdir=infra/terraform validate

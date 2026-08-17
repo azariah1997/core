@@ -1,0 +1,5 @@
+name: analytics
+owner: platform
+lifecycle: experimental
+dependencies:
+  - events-workflows

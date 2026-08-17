@@ -1,0 +1,6 @@
+name: access
+owner: platform
+lifecycle: experimental
+dependencies:
+  - identity
+  - users

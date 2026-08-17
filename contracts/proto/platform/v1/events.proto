@@ -1,0 +1,12 @@
+syntax = "proto3";
+package platform.v1;
+option go_package = "github.com/example/core-platform/contracts/gen/platform/v1";
+message EventEnvelope {
+  string id = 1;
+  string type = 2;
+  int32 version = 3;
+  string source = 4;
+  string correlation_id = 5;
+  string occurred_at = 6;
+  bytes data_json = 7;
+}

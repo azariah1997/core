@@ -1,0 +1,5 @@
+name: events-workflows
+owner: platform
+lifecycle: experimental
+dependencies:
+  - operations

@@ -1,0 +1,108 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: core
+      POSTGRES_PASSWORD: core
+      POSTGRES_DB: core
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../data/migrations:/docker-entrypoint-initdb.d/01-migrations:ro
+      - ../../data/seeds:/docker-entrypoint-initdb.d/02-seeds:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U core -d core"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    ports: ["6379:6379"]
+    command: ["valkey-server", "--appendonly", "yes"]
+    volumes: ["valkeydata:/data"]
+
+  redpanda:
+    image: redpandadata/redpanda:v25.1.9
+    command: ["redpanda", "start", "--overprovisioned", "--smp", "1", "--memory", "1G", "--reserve-memory", "0M", "--node-id", "0", "--check=false", "--kafka-addr", "PLAINTEXT://0.0.0.0:9092", "--advertise-kafka-addr", "PLAINTEXT://localhost:9092"]
+    ports: ["9092:9092", "9644:9644"]
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio123
+    ports: ["9000:9000", "9001:9001"]
+    volumes: ["miniodata:/data"]
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3
+    command: start-dev
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports: ["8081:8080"]
+
+  openfga:
+    image: openfga/openfga:v1.9.5
+    command: run
+    environment:
+      OPENFGA_DATASTORE_ENGINE: memory
+      OPENFGA_LOG_FORMAT: json
+    ports: ["8082:8080", "8083:3000"]
+
+  temporal:
+    image: temporalio/auto-setup:1.28.0
+    environment:
+      DB: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: core
+      POSTGRES_PWD: core
+      POSTGRES_SEEDS: postgres
+    depends_on: [postgres]
+    ports: ["7233:7233"]
+
+  opensearch:
+    image: opensearchproject/opensearch:2.19.1
+    environment:
+      discovery.type: single-node
+      plugins.security.disabled: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports: ["9200:9200"]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes: ["../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:12.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports: ["3000:3000"]
+    volumes: ["grafanadata:/var/lib/grafana"]
+
+  loki:
+    image: grafana/loki:3.5.3
+    command: -config.file=/etc/loki/local-config.yaml
+    ports: ["3100:3100"]
+
+  tempo:
+    image: grafana/tempo:2.8.1
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes: ["../observability/tempo.yaml:/etc/tempo.yaml:ro"]
+    ports: ["3200:3200", "4317:4317"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.132.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["../observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro"]
+    ports: ["4318:4318"]
+
+volumes:
+  pgdata: {}
+  valkeydata: {}
+  miniodata: {}
+  grafanadata: {}

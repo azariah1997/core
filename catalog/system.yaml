@@ -1,0 +1,43 @@
+apiVersion: backstage.io/v1alpha1
+kind: System
+metadata:
+  name: core-platform
+  description: Shared application platform for all products
+spec:
+  owner: platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: core-api
+  description: Public/domain API entry point
+  annotations:
+    github.com/project-slug: YOUR_ORG/core-platform
+spec:
+  type: service
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  providesApis: [core-api]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: realtime-gateway
+spec:
+  type: service
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+---
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: core-api
+spec:
+  type: openapi
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  definition:
+    $text: ../contracts/openapi/core-api.yaml

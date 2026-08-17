@@ -1,0 +1,8 @@
+go 1.23.0
+
+use (
+    ./backend/core-api
+    ./backend/realtime-gateway
+    ./backend/worker
+    ./packages/go/platformkit
+)

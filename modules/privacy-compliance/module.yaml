@@ -1,0 +1,6 @@
+name: privacy-compliance
+owner: platform
+lifecycle: experimental
+dependencies:
+  - users
+  - audit

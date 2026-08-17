@@ -1,0 +1,6 @@
+name: ai
+owner: platform
+lifecycle: experimental
+dependencies:
+  - access
+  - events-workflows

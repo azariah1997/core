@@ -1,0 +1,6 @@
+name: commerce
+owner: platform
+lifecycle: experimental
+dependencies:
+  - users
+  - access

@@ -1,0 +1,23 @@
+asyncapi: 3.0.0
+info:
+  title: Core Platform Events
+  version: 1.0.0
+channels:
+  userCreated:
+    address: user.created.v1
+    messages:
+      userCreated:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: user.created }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data: { type: object }
+operations:
+  publishUserCreated:
+    action: send
+    channel: { $ref: '#/channels/userCreated' }

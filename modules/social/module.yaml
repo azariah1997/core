@@ -1,0 +1,6 @@
+name: social
+owner: platform
+lifecycle: experimental
+dependencies:
+  - users
+  - access

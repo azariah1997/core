@@ -1,0 +1,5 @@
+name: configuration
+owner: platform
+lifecycle: experimental
+dependencies:
+  - platform

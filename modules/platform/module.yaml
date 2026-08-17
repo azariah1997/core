@@ -1,0 +1,5 @@
+name: platform
+owner: platform
+lifecycle: experimental
+dependencies:
+  - operations

@@ -1,0 +1,7 @@
+name: communication
+owner: platform
+lifecycle: experimental
+dependencies:
+  - users
+  - access
+  - social

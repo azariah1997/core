@@ -1,0 +1,18 @@
+global:
+  imageRegistry: ghcr.io/example
+  imageTag: latest
+coreApi:
+  replicas: 2
+  image: core-api
+  port: 8080
+realtime:
+  replicas: 2
+  image: realtime-gateway
+  port: 8090
+worker:
+  replicas: 1
+  image: worker
+  port: 8091
+config:
+  platformEnv: production
+  platformName: core-platform
