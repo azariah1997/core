@@ -55,7 +55,7 @@ services:
   temporal:
     image: temporalio/auto-setup:1.28.0
     environment:
-      DB: postgresql
+      DB: postgres12
       DB_PORT: 5432
       POSTGRES_USER: core
       POSTGRES_PWD: core
@@ -69,6 +69,7 @@ services:
       discovery.type: single-node
       plugins.security.disabled: "true"
       OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: "CorePlatform!Local1"
     ports: ["9200:9200"]
 
   prometheus:
