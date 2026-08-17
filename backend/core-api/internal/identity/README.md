@@ -11,13 +11,13 @@
 ## Non-responsibilities
 
 - No login/signup UI or OAuth redirect flow - this validates tokens a client already obtained from the IdP directly (e.g. Keycloak's own token endpoint), it doesn't broker the browser flow.
-- Does not create or link a platform `User` - `identities.user_id` is nullable; an identity can authenticate before it's provisioned as a User. That provisioning is Phase 4's job.
+- Does not create or link a platform `User` - `identities.user_id` is nullable; an identity can authenticate before it's provisioned as a User. `LinkUser` records the linkage once someone else decides it; `internal/users` (Phase 4) does the deciding, via `internal/api/session.go`'s composition.
 - Does not decide which endpoints require authentication - `Middleware` is applied per-route by whoever registers routes, not globally.
 
 ## Layout
 
 - `domain.go` - `Identity`, `Claims`, `Provider` and `Repository` interfaces.
-- `service.go` - `Service.Authenticate` (validate + touch), the only thing HTTP/SDK layers should depend on.
+- `service.go` - `Service.Authenticate` (validate + touch, returning both the persisted `Identity` and the raw `Claims` - the latter needed only by one-time decisions like naming a newly provisioned User) and `LinkUser`. The only thing HTTP/SDK layers should depend on.
 - `http.go` - `Middleware` and `GET /v1/identity/me` (a minimal endpoint proving the whole pipeline, independent of any product feature needing auth yet).
 - `keycloak/` - the production `Provider`: JWKS-verified JWT validation plus Keycloak Admin REST API-backed `CreateIdentity`/`GetIdentity`/`DisableIdentity`.
 - `postgres/` - the production `Repository`, atomic upsert via `ON CONFLICT`.

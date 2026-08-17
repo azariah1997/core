@@ -14,12 +14,15 @@ func newService() *identity.Service {
 
 func TestAuthenticateCreatesIdentityOnFirstSight(t *testing.T) {
 	svc := newService()
-	id, err := svc.Authenticate(context.Background(), "user-123")
+	id, claims, err := svc.Authenticate(context.Background(), "user-123")
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
 	if id.ProviderSubject != "user-123" || id.Provider != "fake" {
 		t.Fatalf("unexpected identity: %+v", id)
+	}
+	if claims.Subject != "user-123" {
+		t.Fatalf("unexpected claims: %+v", claims)
 	}
 	if id.Status != identity.StatusActive {
 		t.Fatalf("expected new identity to default to active, got %s", id.Status)
@@ -33,11 +36,11 @@ func TestAuthenticateReusesExistingIdentity(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
 
-	first, err := svc.Authenticate(ctx, "user-123")
+	first, _, err := svc.Authenticate(ctx, "user-123")
 	if err != nil {
 		t.Fatalf("first authenticate: %v", err)
 	}
-	second, err := svc.Authenticate(ctx, "user-123")
+	second, _, err := svc.Authenticate(ctx, "user-123")
 	if err != nil {
 		t.Fatalf("second authenticate: %v", err)
 	}
@@ -48,7 +51,7 @@ func TestAuthenticateReusesExistingIdentity(t *testing.T) {
 
 func TestAuthenticateRejectsInvalidToken(t *testing.T) {
 	svc := newService()
-	_, err := svc.Authenticate(context.Background(), "")
+	_, _, err := svc.Authenticate(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected an error for an empty token")
 	}
@@ -57,11 +60,30 @@ func TestAuthenticateRejectsInvalidToken(t *testing.T) {
 func TestDisableChangesStatus(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
-	id, err := svc.Authenticate(ctx, "user-123")
+	id, _, err := svc.Authenticate(ctx, "user-123")
 	if err != nil {
 		t.Fatalf("authenticate: %v", err)
 	}
 	if err := svc.Disable(ctx, id.ID); err != nil {
 		t.Fatalf("disable: %v", err)
+	}
+}
+
+func TestLinkUserSetsUserID(t *testing.T) {
+	svc := newService()
+	ctx := context.Background()
+	id, _, err := svc.Authenticate(ctx, "user-123")
+	if err != nil {
+		t.Fatalf("authenticate: %v", err)
+	}
+	if err := svc.LinkUser(ctx, id.ID, "platform-user-1"); err != nil {
+		t.Fatalf("link user: %v", err)
+	}
+	linked, _, err := svc.Authenticate(ctx, "user-123")
+	if err != nil {
+		t.Fatalf("re-authenticate: %v", err)
+	}
+	if linked.UserID == nil || *linked.UserID != "platform-user-1" {
+		t.Fatalf("expected UserID to be linked, got %+v", linked.UserID)
 	}
 }

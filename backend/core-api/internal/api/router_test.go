@@ -11,6 +11,8 @@ import (
 	applicationsmemory "github.com/example/core-platform/backend/core-api/internal/applications/memory"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	identitymemory "github.com/example/core-platform/backend/core-api/internal/identity/memory"
+	"github.com/example/core-platform/backend/core-api/internal/users"
+	usersmemory "github.com/example/core-platform/backend/core-api/internal/users/memory"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 )
 
@@ -19,6 +21,7 @@ func newTestHandler() http.Handler {
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
 		identity.NewService("fake", identitymemory.Provider{}, identitymemory.New()),
+		users.NewService(usersmemory.New()),
 	)
 }
 
@@ -114,5 +117,89 @@ func TestCreateApplicationRejectsInvalidSlug(t *testing.T) {
 	newTestHandler().ServeHTTP(rr, req)
 	if rr.Code != 400 {
 		t.Fatalf("expected 400, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestMeWithoutTokenReturns401(t *testing.T) {
+	req := httptest.NewRequest("GET", "/v1/users/me", nil)
+	rr := httptest.NewRecorder()
+	newTestHandler().ServeHTTP(rr, req)
+	if rr.Code != 401 {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+}
+
+// TestFirstLoginProvisionsAndLinksAUser is the Phase 3 + Phase 4 seam:
+// an authenticated identity with no linked user yet should get one
+// created and linked on its first authenticated request, and every
+// subsequent request should resolve to that same user.
+func TestFirstLoginProvisionsAndLinksAUser(t *testing.T) {
+	handler := newTestHandler()
+
+	first := httptest.NewRequest("GET", "/v1/users/me", nil)
+	first.Header.Set("Authorization", "Bearer newcomer")
+	firstRR := httptest.NewRecorder()
+	handler.ServeHTTP(firstRR, first)
+	if firstRR.Code != 200 {
+		t.Fatalf("expected 200, got %d: %s", firstRR.Code, firstRR.Body.String())
+	}
+	var firstBody map[string]any
+	if err := json.NewDecoder(firstRR.Body).Decode(&firstBody); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	userID, _ := firstBody["id"].(string)
+	if userID == "" {
+		t.Fatal("expected a provisioned user id")
+	}
+	if firstBody["displayName"] != "newcomer" {
+		t.Fatalf("expected displayName derived from the fake provider's username, got %v", firstBody["displayName"])
+	}
+
+	second := httptest.NewRequest("GET", "/v1/users/me", nil)
+	second.Header.Set("Authorization", "Bearer newcomer")
+	secondRR := httptest.NewRecorder()
+	handler.ServeHTTP(secondRR, second)
+	var secondBody map[string]any
+	if err := json.NewDecoder(secondRR.Body).Decode(&secondBody); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if secondBody["id"] != userID {
+		t.Fatalf("expected the same user to be resolved on a second login, got %v vs %v", secondBody["id"], userID)
+	}
+}
+
+func TestPatchMeRequiresAuth(t *testing.T) {
+	req := httptest.NewRequest("PATCH", "/v1/users/me", strings.NewReader(`{"displayName":"x"}`))
+	rr := httptest.NewRecorder()
+	newTestHandler().ServeHTTP(rr, req)
+	if rr.Code != 401 {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestGetUserByIDRequiresAuthButNotOwnership(t *testing.T) {
+	handler := newTestHandler()
+
+	provision := httptest.NewRequest("GET", "/v1/users/me", nil)
+	provision.Header.Set("Authorization", "Bearer someone-else")
+	provisionRR := httptest.NewRecorder()
+	handler.ServeHTTP(provisionRR, provision)
+	var provisioned map[string]any
+	_ = json.NewDecoder(provisionRR.Body).Decode(&provisioned)
+	otherUserID := provisioned["id"].(string)
+
+	unauth := httptest.NewRequest("GET", "/v1/users/"+otherUserID, nil)
+	unauthRR := httptest.NewRecorder()
+	handler.ServeHTTP(unauthRR, unauth)
+	if unauthRR.Code != 401 {
+		t.Fatalf("expected 401 without auth, got %d", unauthRR.Code)
+	}
+
+	authed := httptest.NewRequest("GET", "/v1/users/"+otherUserID, nil)
+	authed.Header.Set("Authorization", "Bearer newcomer")
+	authedRR := httptest.NewRecorder()
+	handler.ServeHTTP(authedRR, authed)
+	if authedRR.Code != 200 {
+		t.Fatalf("expected any authenticated caller to view another user's profile pending Phase 6 authorization, got %d", authedRR.Code)
 	}
 }

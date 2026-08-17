@@ -67,3 +67,15 @@ func (r *Repository) Disable(ctx context.Context, id string) error {
 	r.byID[id] = rec
 	return nil
 }
+
+func (r *Repository) LinkUser(ctx context.Context, identityID, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	rec, ok := r.byID[identityID]
+	if !ok {
+		return identity.ErrNotFound
+	}
+	rec.UserID = &userID
+	r.byID[identityID] = rec
+	return nil
+}

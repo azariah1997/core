@@ -80,4 +80,8 @@ type Repository interface {
 	// or updating LastLoginAt on subsequent ones. Idempotent per call.
 	Touch(ctx context.Context, provider, providerSubject string) (Identity, error)
 	Disable(ctx context.Context, id string) error
+	// LinkUser records which platform User this identity was provisioned
+	// as. Called once, by whoever orchestrates "create a User for a
+	// first-time login" (Phase 4) - identity itself never creates Users.
+	LinkUser(ctx context.Context, identityID, userID string) error
 }

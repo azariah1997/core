@@ -10,11 +10,21 @@ import (
 )
 
 type contextKey struct{}
+type claimsContextKey struct{}
 
 // FromContext returns the Identity attached by Middleware, if any.
 func FromContext(ctx context.Context) (Identity, bool) {
 	id, ok := ctx.Value(contextKey{}).(Identity)
 	return id, ok
+}
+
+// ClaimsFromContext returns the raw token Claims attached by Middleware, if
+// any. Most callers want FromContext instead; this exists for the rare
+// case (like provisioning a User on first login) that needs profile data
+// the persisted Identity deliberately doesn't carry.
+func ClaimsFromContext(ctx context.Context) (Claims, bool) {
+	c, ok := ctx.Value(claimsContextKey{}).(Claims)
+	return c, ok
 }
 
 // Middleware requires a valid Bearer token on every request it wraps,
@@ -29,12 +39,13 @@ func Middleware(svc *Service) func(http.Handler) http.Handler {
 				apperr.Write(w, r, apperr.New(apperr.CodeUnauthenticated, "missing or malformed Authorization header"))
 				return
 			}
-			id, err := svc.Authenticate(r.Context(), token)
+			id, claims, err := svc.Authenticate(r.Context(), token)
 			if err != nil {
 				apperr.Write(w, r, apperr.New(apperr.CodeUnauthenticated, "invalid or expired token"))
 				return
 			}
 			ctx := context.WithValue(r.Context(), contextKey{}, id)
+			ctx = context.WithValue(ctx, claimsContextKey{}, claims)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

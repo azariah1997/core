@@ -66,3 +66,14 @@ func (r *Repository) Disable(ctx context.Context, id string) error {
 	}
 	return nil
 }
+
+func (r *Repository) LinkUser(ctx context.Context, identityID, userID string) error {
+	tag, err := r.pool.Exec(ctx, `UPDATE identities SET user_id = $1 WHERE id = $2`, userID, identityID)
+	if err != nil {
+		return fmt.Errorf("link user to identity: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return identity.ErrNotFound
+	}
+	return nil
+}

@@ -12,6 +12,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	"github.com/example/core-platform/backend/core-api/internal/identity/keycloak"
 	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/users"
+	userspg "github.com/example/core-platform/backend/core-api/internal/users/postgres"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
@@ -63,8 +65,9 @@ func main() {
 		os.Exit(1)
 	}
 	identitySvc := identity.NewService("keycloak", keycloakProvider, identitypg.New(pool))
+	usersSvc := users.NewService(userspg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc))
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

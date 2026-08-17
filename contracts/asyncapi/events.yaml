@@ -16,7 +16,73 @@ channels:
             version: { const: 1 }
             source: { type: string }
             occurredAt: { type: string, format: date-time }
-            data: { type: object }
+            data:
+              type: object
+              required: [id, displayName, status]
+              properties:
+                id: { type: string }
+                displayName: { type: string }
+                status: { type: string, enum: [active, deactivated, deleted] }
+  userUpdated:
+    address: user.updated.v1
+    messages:
+      userUpdated:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: user.updated }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, displayName, status]
+              properties:
+                id: { type: string }
+                displayName: { type: string }
+                status: { type: string, enum: [active, deactivated, deleted] }
+  userDeactivated:
+    address: user.deactivated.v1
+    messages:
+      userDeactivated:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: user.deactivated }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, displayName, status]
+              properties:
+                id: { type: string }
+                displayName: { type: string }
+                status: { type: string, enum: [active, deactivated, deleted] }
+  userDeleted:
+    address: user.deleted.v1
+    messages:
+      userDeleted:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: user.deleted }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, displayName, status]
+              properties:
+                id: { type: string }
+                displayName: { type: string }
+                status: { type: string, enum: [active, deactivated, deleted] }
   applicationCreated:
     address: application.created.v1
     messages:
@@ -63,6 +129,15 @@ operations:
   publishUserCreated:
     action: send
     channel: { $ref: '#/channels/userCreated' }
+  publishUserUpdated:
+    action: send
+    channel: { $ref: '#/channels/userUpdated' }
+  publishUserDeactivated:
+    action: send
+    channel: { $ref: '#/channels/userDeactivated' }
+  publishUserDeleted:
+    action: send
+    channel: { $ref: '#/channels/userDeleted' }
   publishApplicationCreated:
     action: send
     channel: { $ref: '#/channels/applicationCreated' }

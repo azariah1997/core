@@ -71,7 +71,19 @@ Validated fully live, not just against the in-memory fake: minted a real token f
 
 `users.identity_subject` (from the original `0001_core.sql` scaffold) is superseded by the new `identities` table but intentionally left alone - dropping/renaming it is a non-additive schema change with no current reader depending on the new table yet, per this repo's "prefer additive changes" migration rule.
 
+## 2026-08-17: Phase 4 - Users
+
+The platform person/account, separate from Identity: `GET/PATCH /v1/users/me`, `GET /v1/users/{id}`. Ties Phases 3 and 4 together via `Service.EnsureForIdentity` - resolves the User already linked to an authenticated Identity, or provisions and links one on first login, with the display name derived from the token's `preferred_username`/`email` claims. Full soft-delete lifecycle: `active` <-> `deactivated` via the normal `PATCH`, `deleted` only reachable through a dedicated `Service.Delete` (rejected with 400 if attempted via `PATCH .../status`) so it's never accidental and always emits its own `user.deleted` event rather than a generic `user.updated`.
+
+`users` and `identity` stay decoupled in both directions: `users` never imports `identity` (`EnsureForIdentity` takes primitive values and a small `IdentityLinker` interface it defines itself, satisfied structurally); the composition - reading identity's context, deriving a display name, calling `EnsureForIdentity` - lives in `internal/api/session.go`, not in either domain package.
+
+`0004_users_registry.sql` adds `avatar_ref` and relaxes `identity_subject` to nullable (superseded by `identities.user_id`, which supports multiple linked identities per user where the old column only supported one - left in place rather than dropped, per this repo's additive-migration preference).
+
+Validated live end-to-end against real Postgres + Keycloak: no token -> 401 on both `/me` endpoints, first authenticated request provisions and links a User (confirmed via `SELECT` on `identities.user_id`), a second request resolves the same User, `PATCH` updates fields and toggles `active`/`deactivated`, attempting `status: deleted` via `PATCH` is correctly rejected, and all four event types (`user.created`, `user.updated`, `user.deactivated`, `user.deleted`) confirmed landing in `outbox_events`. `Service.Delete` isn't behind an HTTP route yet (no endpoint for it in this phase's scope), so it was verified separately via a throwaway (not committed) program against real Postgres, the same way Phase 3's Keycloak Admin API methods were.
+
 ### Known gap, not fixed (out of scope for this pass)
+- `UserPreferences`, named in the Phase 4 roadmap heading, has no concrete fields specified anywhere in the roadmap and no consumer yet - deferred to Phase 12 (Notifications), which is the first phase that actually needs opt-outs/quiet-hours data, rather than inventing a shape now.
+- `GET /v1/users/{id}` is authenticated-only today (any logged-in caller can view any user's profile) - resource-scoped visibility is explicitly Phase 6's job.
 - `apps/mobile` has no `test/` directory, so `make flutter-test` fails; not currently wired into CI either. Deferred to when the mobile shell gets real screens worth testing.
 - `apps/admin`'s `next@15`/`sharp` pulls in 3 high-severity transitive advisories (postcss, libvips); the fix is a Next.js major-version bump, which is a separate, reviewable change.
 - Real PostgreSQL/Redis/Kafka client wiring (as opposed to the TCP-reachability health checks that exist today) is deferred to whichever domain module first needs it, per this file's existing scope note above.
