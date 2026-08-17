@@ -9,6 +9,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/api"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationspg "github.com/example/core-platform/backend/core-api/internal/applications/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/devices"
+	devicespg "github.com/example/core-platform/backend/core-api/internal/devices/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	"github.com/example/core-platform/backend/core-api/internal/identity/keycloak"
 	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
@@ -66,8 +68,9 @@ func main() {
 	}
 	identitySvc := identity.NewService("keycloak", keycloakProvider, identitypg.New(pool))
 	usersSvc := users.NewService(userspg.New(pool))
+	devicesSvc := devices.NewService(devicespg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc))
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

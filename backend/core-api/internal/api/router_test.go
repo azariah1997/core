@@ -9,6 +9,8 @@ import (
 
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationsmemory "github.com/example/core-platform/backend/core-api/internal/applications/memory"
+	"github.com/example/core-platform/backend/core-api/internal/devices"
+	devicesmemory "github.com/example/core-platform/backend/core-api/internal/devices/memory"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	identitymemory "github.com/example/core-platform/backend/core-api/internal/identity/memory"
 	"github.com/example/core-platform/backend/core-api/internal/users"
@@ -22,6 +24,7 @@ func newTestHandler() http.Handler {
 		applications.NewService(applicationsmemory.New()),
 		identity.NewService("fake", identitymemory.Provider{}, identitymemory.New()),
 		users.NewService(usersmemory.New()),
+		devices.NewService(devicesmemory.New()),
 	)
 }
 

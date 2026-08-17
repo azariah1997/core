@@ -81,6 +81,16 @@ The platform person/account, separate from Identity: `GET/PATCH /v1/users/me`, `
 
 Validated live end-to-end against real Postgres + Keycloak: no token -> 401 on both `/me` endpoints, first authenticated request provisions and links a User (confirmed via `SELECT` on `identities.user_id`), a second request resolves the same User, `PATCH` updates fields and toggles `active`/`deactivated`, attempting `status: deleted` via `PATCH` is correctly rejected, and all four event types (`user.created`, `user.updated`, `user.deactivated`, `user.deleted`) confirmed landing in `outbox_events`. `Service.Delete` isn't behind an HTTP route yet (no endpoint for it in this phase's scope), so it was verified separately via a throwaway (not committed) program against real Postgres, the same way Phase 3's Keycloak Admin API methods were.
 
+## 2026-08-17: Phase 5 - Devices/Sessions
+
+Per-user device tracking: `POST/GET /v1/users/me/devices`, `DELETE /v1/users/me/devices/{id}`, all scoped to the caller's own user (enforced at the repository query level, not just routing). `Register` upserts by `(userID, clientDeviceID)` - first sight creates, repeat sight refreshes profile fields and `LastActiveAt`, and re-registering a previously revoked device reactivates it. `DELETE` soft-revokes (`session_status = 'revoked'`) rather than hard-deleting, so a device disappears from the active list while the row is retained.
+
+No separate `Session` table: `Device.SessionStatus` (`active`/`revoked`) stands in for it, since nothing in this phase needs more than one live session per device - documented as the deferred extension in `backend/core-api/internal/devices/README.md`, same pattern as this repo's other intentionally-scoped-down phases. No events emitted either, matching the roadmap (Phase 5, unlike Phases 2/4, specifies none).
+
+`0005_devices_sessions.sql` adds `client_device_id`, `os_version`, `locale`, `timezone`, `session_status` and the `(user_id, client_device_id)` uniqueness the upsert depends on - safe as a plain (non-partial) unique index since the `devices` table had zero rows before this phase.
+
+Validated live end-to-end against real Postgres + Keycloak: 401 with no token, registered two devices, listed both, revoked one (204) and confirmed it disappeared from the list while a second revoke attempt correctly 404s, re-registered the revoked device and confirmed it reactivated under the *same* device ID with its previous push token preserved (via `COALESCE` in the upsert - re-registering without repeating `pushToken` doesn't wipe it), and confirmed the response body never contains the raw push token string at any point.
+
 ### Known gap, not fixed (out of scope for this pass)
 - `UserPreferences`, named in the Phase 4 roadmap heading, has no concrete fields specified anywhere in the roadmap and no consumer yet - deferred to Phase 12 (Notifications), which is the first phase that actually needs opt-outs/quiet-hours data, rather than inventing a shape now.
 - `GET /v1/users/{id}` is authenticated-only today (any logged-in caller can view any user's profile) - resource-scoped visibility is explicitly Phase 6's job.
