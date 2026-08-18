@@ -16,6 +16,8 @@ import (
 	authzmemory "github.com/example/core-platform/backend/core-api/internal/authz/memory"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicesmemory "github.com/example/core-platform/backend/core-api/internal/devices/memory"
+	"github.com/example/core-platform/backend/core-api/internal/features"
+	featuresmemory "github.com/example/core-platform/backend/core-api/internal/features/memory"
 	"github.com/example/core-platform/backend/core-api/internal/files"
 	filesmemory "github.com/example/core-platform/backend/core-api/internal/files/memory"
 	"github.com/example/core-platform/backend/core-api/internal/groups"
@@ -115,6 +117,7 @@ func newTestHandler() http.Handler {
 		search.NewService(noopSearchProvider{}, authzSvc),
 		jobs.NewService(jobsmemory.New(), authzSvc),
 		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
+		features.NewService(featuresmemory.New(), authzSvc),
 	)
 }
 
@@ -354,6 +357,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		search.NewService(noopSearchProvider{}, authzSvc),
 		jobs.NewService(jobsmemory.New(), authzSvc),
 		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
+		features.NewService(featuresmemory.New(), authzSvc),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

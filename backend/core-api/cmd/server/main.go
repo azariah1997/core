@@ -16,6 +16,8 @@ import (
 	authzpg "github.com/example/core-platform/backend/core-api/internal/authz/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicespg "github.com/example/core-platform/backend/core-api/internal/devices/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/features"
+	featurespg "github.com/example/core-platform/backend/core-api/internal/features/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/files"
 	filespg "github.com/example/core-platform/backend/core-api/internal/files/postgres"
 	filess3 "github.com/example/core-platform/backend/core-api/internal/files/s3"
@@ -155,7 +157,9 @@ func main() {
 	defer temporalClient.Close()
 	workflowsSvc := workflows.NewService(workflowspg.New(pool), temporalClient, authzSvc)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc))
+	featuresSvc := features.NewService(featurespg.New(pool), authzSvc)
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {
