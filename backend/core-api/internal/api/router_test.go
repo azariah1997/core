@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationsmemory "github.com/example/core-platform/backend/core-api/internal/applications/memory"
@@ -15,6 +16,8 @@ import (
 	authzmemory "github.com/example/core-platform/backend/core-api/internal/authz/memory"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicesmemory "github.com/example/core-platform/backend/core-api/internal/devices/memory"
+	"github.com/example/core-platform/backend/core-api/internal/files"
+	filesmemory "github.com/example/core-platform/backend/core-api/internal/files/memory"
 	"github.com/example/core-platform/backend/core-api/internal/groups"
 	groupsmemory "github.com/example/core-platform/backend/core-api/internal/groups/memory"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
@@ -41,6 +44,23 @@ func (noopRealtime) ToUser(ctx context.Context, userID string, payload json.RawM
 	return nil
 }
 
+// noopObjectStore satisfies files.ObjectStore without a real S3/MinIO -
+// these router tests exercise HTTP wiring and cross-module auth, not
+// object storage (that's files' own package tests, and this phase's live
+// validation against real MinIO).
+type noopObjectStore struct{}
+
+func (noopObjectStore) PresignPut(ctx context.Context, objectKey, contentType string, expires time.Duration) (string, error) {
+	return "https://noop.local/put/" + objectKey, nil
+}
+func (noopObjectStore) PresignGet(ctx context.Context, objectKey string, expires time.Duration) (string, error) {
+	return "https://noop.local/get/" + objectKey, nil
+}
+func (noopObjectStore) HeadObject(ctx context.Context, objectKey string) (int64, string, error) {
+	return 0, "", nil
+}
+func (noopObjectStore) DeleteObject(ctx context.Context, objectKey string) error { return nil }
+
 func newTestHandler() http.Handler {
 	authzSvc := authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider())
 	return New(
@@ -55,6 +75,7 @@ func newTestHandler() http.Handler {
 		groups.NewService(groupsmemory.New()),
 		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
 		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
+		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
 	)
 }
 
@@ -290,6 +311,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		groups.NewService(groupsmemory.New()),
 		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
 		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
+		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

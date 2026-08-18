@@ -16,6 +16,9 @@ import (
 	authzpg "github.com/example/core-platform/backend/core-api/internal/authz/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicespg "github.com/example/core-platform/backend/core-api/internal/devices/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/files"
+	filespg "github.com/example/core-platform/backend/core-api/internal/files/postgres"
+	filess3 "github.com/example/core-platform/backend/core-api/internal/files/s3"
 	"github.com/example/core-platform/backend/core-api/internal/groups"
 	groupspg "github.com/example/core-platform/backend/core-api/internal/groups/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
@@ -117,7 +120,16 @@ func main() {
 	}
 	notificationsSvc := notifications.NewService(notificationspg.New(pool), notificationSenders, authzSvc, logger)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc))
+	objectStore, err := filess3.New(ctx, filess3.Config{
+		Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey,
+	})
+	if err != nil {
+		logger.Error("failed to initialise object storage", "error", err)
+		os.Exit(1)
+	}
+	filesSvc := files.NewService(filespg.New(pool), objectStore, authzSvc, files.Config{})
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

@@ -231,6 +231,28 @@ channels:
             source: { type: string }
             occurredAt: { type: string, format: date-time }
             data: { $ref: '#/components/schemas/notificationDeliveryOutcome' }
+  fileUploaded:
+    address: file.uploaded.v1
+    messages:
+      fileUploaded:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: file.uploaded }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, appId, ownerUserId, mimeType, byteSize]
+              properties:
+                id: { type: string }
+                appId: { type: string }
+                ownerUserId: { type: string }
+                mimeType: { type: string }
+                byteSize: { type: integer }
 components:
   schemas:
     notificationDeliveryOutcome:
@@ -278,3 +300,6 @@ operations:
   publishNotificationFailed:
     action: send
     channel: { $ref: '#/channels/notificationFailed' }
+  publishFileUploaded:
+    action: send
+    channel: { $ref: '#/channels/fileUploaded' }
