@@ -145,7 +145,7 @@ channels:
                 id: { type: string }
                 requesterUserId: { type: string }
                 targetUserId: { type: string }
-                type: { type: string, description: Product-defined relationship type (e.g. "friend", "follow") - never a fixed platform concept. }
+                type: { type: string, description: "Product-defined relationship type (e.g. 'friend', 'follow') - never a fixed platform concept." }
                 status: { type: string, enum: [pending, active, blocked, ended] }
   messageSent:
     address: message.sent.v1
@@ -167,7 +167,80 @@ channels:
                 id: { type: string }
                 conversationId: { type: string }
                 senderId: { type: string }
-                type: { type: string, description: Product-defined message type (e.g. "TEXT", "IMAGE", "STICKER") - extensible, never a fixed platform enum. }
+                type: { type: string, description: "Product-defined message type (e.g. 'TEXT', 'IMAGE', 'STICKER') - extensible, never a fixed platform enum." }
+  notificationRequested:
+    address: notification.requested.v1
+    messages:
+      notificationRequested:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: notification.requested }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, userId, category, channels]
+              properties:
+                id: { type: string }
+                userId: { type: string }
+                category: { type: string, description: "Product-defined notification category (e.g. 'message', 'friend_request') - never a fixed platform concept." }
+                channels: { type: array, items: { type: string, enum: [push, email, sms, in_app, realtime] } }
+  notificationSent:
+    address: notification.sent.v1
+    messages:
+      notificationSent:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: notification.sent }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data: { $ref: '#/components/schemas/notificationDeliveryOutcome' }
+  notificationDelivered:
+    address: notification.delivered.v1
+    messages:
+      notificationDelivered:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: notification.delivered }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data: { $ref: '#/components/schemas/notificationDeliveryOutcome' }
+  notificationFailed:
+    address: notification.failed.v1
+    messages:
+      notificationFailed:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: notification.failed }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data: { $ref: '#/components/schemas/notificationDeliveryOutcome' }
+components:
+  schemas:
+    notificationDeliveryOutcome:
+      type: object
+      required: [deliveryId, notificationId, channel, status]
+      properties:
+        deliveryId: { type: string }
+        notificationId: { type: string }
+        channel: { type: string, enum: [push, email, sms, in_app, realtime] }
+        status: { type: string, enum: [pending, sent, delivered, failed, deferred, skipped] }
 operations:
   publishUserCreated:
     action: send
@@ -193,3 +266,15 @@ operations:
   publishMessageSent:
     action: send
     channel: { $ref: '#/channels/messageSent' }
+  publishNotificationRequested:
+    action: send
+    channel: { $ref: '#/channels/notificationRequested' }
+  publishNotificationSent:
+    action: send
+    channel: { $ref: '#/channels/notificationSent' }
+  publishNotificationDelivered:
+    action: send
+    channel: { $ref: '#/channels/notificationDelivered' }
+  publishNotificationFailed:
+    action: send
+    channel: { $ref: '#/channels/notificationFailed' }

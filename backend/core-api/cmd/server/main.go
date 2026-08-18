@@ -23,6 +23,9 @@ import (
 	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/messaging"
 	messagingpg "github.com/example/core-platform/backend/core-api/internal/messaging/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/notifications"
+	notificationspg "github.com/example/core-platform/backend/core-api/internal/notifications/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/notifications/senders"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipspg "github.com/example/core-platform/backend/core-api/internal/relationships/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
@@ -105,7 +108,16 @@ func main() {
 	groupsSvc := groups.NewService(groupspg.New(pool))
 	messagingSvc := messaging.NewService(messagingpg.New(pool), rtbus.NewPublisher(redisClient), logger)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc))
+	notificationSenders := map[notifications.Channel]notifications.ChannelSender{
+		notifications.ChannelPush:     senders.PushSender{Devices: api.NewDevicePushTokenLookup(devicesSvc), Logger: logger},
+		notifications.ChannelEmail:    senders.LogSender{Channel: notifications.ChannelEmail, Logger: logger},
+		notifications.ChannelSMS:      senders.LogSender{Channel: notifications.ChannelSMS, Logger: logger},
+		notifications.ChannelInApp:    senders.InAppSender{},
+		notifications.ChannelRealtime: senders.RealtimeSender{Realtime: rtbus.NewPublisher(redisClient)},
+	}
+	notificationsSvc := notifications.NewService(notificationspg.New(pool), notificationSenders, authzSvc, logger)
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

@@ -21,6 +21,8 @@ import (
 	identitymemory "github.com/example/core-platform/backend/core-api/internal/identity/memory"
 	"github.com/example/core-platform/backend/core-api/internal/messaging"
 	messagingmemory "github.com/example/core-platform/backend/core-api/internal/messaging/memory"
+	"github.com/example/core-platform/backend/core-api/internal/notifications"
+	notificationsmemory "github.com/example/core-platform/backend/core-api/internal/notifications/memory"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipsmemory "github.com/example/core-platform/backend/core-api/internal/relationships/memory"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
@@ -40,17 +42,19 @@ func (noopRealtime) ToUser(ctx context.Context, userID string, payload json.RawM
 }
 
 func newTestHandler() http.Handler {
+	authzSvc := authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider())
 	return New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
 		identity.NewService("fake", identitymemory.Provider{}, identitymemory.New()),
 		users.NewService(usersmemory.New()),
 		devices.NewService(devicesmemory.New()),
-		authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider()),
+		authzSvc,
 		tenants.NewService(tenantsmemory.New()),
 		relationships.NewService(relationshipsmemory.New()),
 		groups.NewService(groupsmemory.New()),
 		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
+		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
 	)
 }
 
@@ -285,6 +289,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		relationships.NewService(relationshipsmemory.New()),
 		groups.NewService(groupsmemory.New()),
 		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
+		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")
