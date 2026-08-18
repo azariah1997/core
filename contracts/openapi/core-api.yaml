@@ -190,6 +190,99 @@ paths:
       responses:
         '204': { description: Removed }
         '403': { description: Owner or admin role required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /relationships:
+    post:
+      operationId: requestRelationship
+      description: Creates a pending relationship, or revives one back to pending if the only existing row for this pair+type has ended. type is product-defined (e.g. "friend", "follow") - the platform never hardcodes relationship semantics.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RequestRelationship' }
+      responses:
+        '201': { description: Relationship created, content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: A live (pending/active/blocked) relationship already exists for this pair and type, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: listMyRelationships
+      description: Relationships the caller is a participant in.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: type, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { type: string, enum: [pending, active, blocked, ended] } }
+      responses:
+        '200':
+          description: The caller's relationships
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Relationship' } }
+  /relationships/{id}:
+    get:
+      operationId: getRelationship
+      description: Visible to participants only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Relationship, content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '403': { description: Not a participant, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      operationId: removeRelationship
+      description: Cancels a pending request (requester only) or ends an active relationship (either participant).
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Removed }
+        '403': { description: Not permitted, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Relationship is not in a state that allows removal, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /relationships/{id}/accept:
+    post:
+      operationId: acceptRelationship
+      description: Only the target (recipient) of a pending request may accept.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Relationship is now active, content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '403': { description: Only the target may accept, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Relationship is not pending, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /relationships/{id}/decline:
+    post:
+      operationId: declineRelationship
+      description: Only the target (recipient) of a pending request may decline.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Relationship is now ended, content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '403': { description: Only the target may decline, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Relationship is not pending, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /relationships/block:
+    post:
+      operationId: blockUser
+      description: Works whether or not a relationship already exists - blocking a stranger creates one directly in the blocked state; blocking an existing relationship transitions it.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RequestRelationship' }
+      responses:
+        '200': { description: Relationship is now blocked, content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /data/query:
     post:
       deprecated: true
@@ -354,6 +447,27 @@ components:
       properties:
         userId: { type: string, format: uuid }
         role: { type: string, enum: [owner, admin, member] }
+    Relationship:
+      type: object
+      required: [id, appId, requesterUserId, targetUserId, type, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        appId: { type: string, format: uuid }
+        requesterUserId: { type: string, format: uuid }
+        targetUserId: { type: string, format: uuid }
+        type: { type: string, description: Product-defined (e.g. "friend", "follow", "partner") - never a fixed platform concept. }
+        status: { type: string, enum: [pending, active, blocked, ended] }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    RequestRelationship:
+      type: object
+      required: [appId, targetUserId, type]
+      properties:
+        appId: { type: string, format: uuid }
+        targetUserId: { type: string, format: uuid }
+        type: { type: string }
+        metadata: { type: object, additionalProperties: true }
     Application:
       type: object
       required: [id, slug, name, status, createdAt, updatedAt]

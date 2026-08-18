@@ -3,10 +3,12 @@ package tenants
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/example/core-platform/backend/core-api/internal/users"
 	"github.com/example/core-platform/packages/go/platformkit/apperr"
+	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/httpx"
 )
 
@@ -214,6 +216,8 @@ func writeDomainError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, ErrForbidden), errors.Is(err, ErrManagerRequired):
 		apperr.Write(w, r, apperr.New(apperr.CodeAccessDenied, err.Error()))
 	default:
+		slog.Default().Error("unhandled tenants error",
+			"error", err, "correlationId", correlation.FromContext(r.Context()))
 		apperr.Write(w, r, apperr.New(apperr.CodeInternal, "internal error"))
 	}
 }

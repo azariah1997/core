@@ -3,10 +3,12 @@ package devices
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/example/core-platform/backend/core-api/internal/users"
 	"github.com/example/core-platform/packages/go/platformkit/apperr"
+	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/httpx"
 )
 
@@ -120,6 +122,8 @@ func writeDomainError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, ErrNotFound):
 		apperr.Write(w, r, apperr.New(apperr.CodeNotFound, "device not found"))
 	default:
+		slog.Default().Error("unhandled devices error",
+			"error", err, "correlationId", correlation.FromContext(r.Context()))
 		apperr.Write(w, r, apperr.New(apperr.CodeInternal, "internal error"))
 	}
 }

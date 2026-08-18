@@ -125,10 +125,35 @@ channels:
                 slug: { type: string }
                 name: { type: string }
                 status: { type: string, enum: [active, inactive, archived] }
+  relationshipCreated:
+    address: relationship.created.v1
+    messages:
+      relationshipCreated:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: relationship.created }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, requesterUserId, targetUserId, type, status]
+              properties:
+                id: { type: string }
+                requesterUserId: { type: string }
+                targetUserId: { type: string }
+                type: { type: string, description: Product-defined relationship type (e.g. "friend", "follow") - never a fixed platform concept. }
+                status: { type: string, enum: [pending, active, blocked, ended] }
 operations:
   publishUserCreated:
     action: send
     channel: { $ref: '#/channels/userCreated' }
+  publishRelationshipCreated:
+    action: send
+    channel: { $ref: '#/channels/relationshipCreated' }
   publishUserUpdated:
     action: send
     channel: { $ref: '#/channels/userUpdated' }

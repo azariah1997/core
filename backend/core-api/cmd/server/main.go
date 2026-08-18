@@ -17,6 +17,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	"github.com/example/core-platform/backend/core-api/internal/identity/keycloak"
 	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/relationships"
+	relationshipspg "github.com/example/core-platform/backend/core-api/internal/relationships/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
 	tenantspg "github.com/example/core-platform/backend/core-api/internal/tenants/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/users"
@@ -82,8 +84,9 @@ func main() {
 	}
 	authzSvc := authz.NewService(authzpg.New(pool), openfgaProvider)
 	tenantsSvc := tenants.NewService(tenantspg.New(pool))
+	relationshipsSvc := relationships.NewService(relationshipspg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc))
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {
