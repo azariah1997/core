@@ -14,12 +14,8 @@ import (
 	"sync"
 
 	"github.com/redis/go-redis/v9"
-)
 
-const (
-	channelPrefix = "rt:channel:"
-	userPrefix    = "rt:user:"
-	devicePrefix  = "rt:device:"
+	"github.com/example/core-platform/packages/go/platformkit/rtbus"
 )
 
 // Conn is a local WebSocket connection. Send is the outbound queue the
@@ -31,16 +27,10 @@ type Conn struct {
 	Send     chan []byte
 }
 
-type wireMessage struct {
-	Kind    string          `json:"kind"` // "channel", "user" or "device"
-	Channel string          `json:"channel,omitempty"`
-	Target  string          `json:"target,omitempty"` // userID or userID+"|"+deviceID
-	Payload json.RawMessage `json:"payload"`
-}
-
 type Hub struct {
-	redis  *redis.Client
-	logger *slog.Logger
+	redis     *redis.Client
+	publisher *rtbus.Publisher
+	logger    *slog.Logger
 
 	mu     sync.RWMutex
 	conns  map[string]*Conn            // connID -> conn
@@ -50,18 +40,21 @@ type Hub struct {
 
 func New(redisClient *redis.Client, logger *slog.Logger) *Hub {
 	return &Hub{
-		redis:  redisClient,
-		logger: logger,
-		conns:  map[string]*Conn{},
-		subs:   map[string]map[string]bool{},
-		byUser: map[string]map[string]*Conn{},
+		redis:     redisClient,
+		publisher: rtbus.NewPublisher(redisClient),
+		logger:    logger,
+		conns:     map[string]*Conn{},
+		subs:      map[string]map[string]bool{},
+		byUser:    map[string]map[string]*Conn{},
 	}
 }
 
 // Run subscribes to the platform-wide pub/sub pattern and fans incoming
-// messages out to matching local connections until ctx is cancelled.
+// messages out to matching local connections until ctx is cancelled. Any
+// service holding an rtbus.Publisher on the same Redis - not just this
+// hub's own PublishTo* methods - can trigger delivery here.
 func (h *Hub) Run(ctx context.Context) {
-	pubsub := h.redis.PSubscribe(ctx, channelPrefix+"*", userPrefix+"*", devicePrefix+"*")
+	pubsub := h.redis.PSubscribe(ctx, rtbus.ChannelPrefix+"*", rtbus.UserPrefix+"*", rtbus.DevicePrefix+"*")
 	defer pubsub.Close()
 
 	ch := pubsub.Channel()
@@ -79,7 +72,7 @@ func (h *Hub) Run(ctx context.Context) {
 }
 
 func (h *Hub) dispatch(raw string) {
-	var m wireMessage
+	var m rtbus.Message
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		h.logger.Error("hub: malformed pub/sub message", "error", err)
 		return
@@ -89,18 +82,18 @@ func (h *Hub) dispatch(raw string) {
 	defer h.mu.RUnlock()
 
 	switch m.Kind {
-	case "channel":
+	case rtbus.KindChannel:
 		for connID := range h.subs[m.Channel] {
 			if c, ok := h.conns[connID]; ok {
 				nonBlockingSend(c, m.Payload)
 			}
 		}
-	case "user":
+	case rtbus.KindUser:
 		for _, c := range h.byUser[m.Target] {
 			nonBlockingSend(c, m.Payload)
 		}
-	case "device":
-		userID, deviceID, _ := splitTarget(m.Target)
+	case rtbus.KindDevice:
+		userID, deviceID, _ := rtbus.SplitDeviceTarget(m.Target)
 		if devices, ok := h.byUser[userID]; ok {
 			if c, ok := devices[deviceID]; ok {
 				nonBlockingSend(c, m.Payload)
@@ -115,15 +108,6 @@ func nonBlockingSend(c *Conn, payload []byte) {
 	default:
 		// Slow consumer: drop rather than block the hub for everyone else.
 	}
-}
-
-func splitTarget(target string) (userID, deviceID string, ok bool) {
-	for i := 0; i < len(target); i++ {
-		if target[i] == '|' {
-			return target[:i], target[i+1:], true
-		}
-	}
-	return "", "", false
 }
 
 // Register adds a connection, evicting any existing local connection for
@@ -196,26 +180,17 @@ func (h *Hub) IsSubscribed(connID, channel string) bool {
 // PublishToChannel fans payload out to every subscriber of channel on
 // every gateway replica.
 func (h *Hub) PublishToChannel(ctx context.Context, channel string, payload json.RawMessage) error {
-	return h.publish(ctx, channelPrefix+channel, wireMessage{Kind: "channel", Channel: channel, Payload: payload})
+	return h.publisher.ToChannel(ctx, channel, payload)
 }
 
 // PublishToUser delivers payload to every device userID is connected on,
 // across every gateway replica.
 func (h *Hub) PublishToUser(ctx context.Context, userID string, payload json.RawMessage) error {
-	return h.publish(ctx, userPrefix+userID, wireMessage{Kind: "user", Target: userID, Payload: payload})
+	return h.publisher.ToUser(ctx, userID, payload)
 }
 
 // PublishToDevice delivers payload to exactly one (userID, deviceID)
 // connection, wherever it's connected.
 func (h *Hub) PublishToDevice(ctx context.Context, userID, deviceID string, payload json.RawMessage) error {
-	target := userID + "|" + deviceID
-	return h.publish(ctx, devicePrefix+target, wireMessage{Kind: "device", Target: target, Payload: payload})
-}
-
-func (h *Hub) publish(ctx context.Context, redisChannel string, m wireMessage) error {
-	body, err := json.Marshal(m)
-	if err != nil {
-		return err
-	}
-	return h.redis.Publish(ctx, redisChannel, body).Err()
+	return h.publisher.ToDevice(ctx, userID, deviceID, payload)
 }

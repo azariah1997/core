@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +19,8 @@ import (
 	groupsmemory "github.com/example/core-platform/backend/core-api/internal/groups/memory"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	identitymemory "github.com/example/core-platform/backend/core-api/internal/identity/memory"
+	"github.com/example/core-platform/backend/core-api/internal/messaging"
+	messagingmemory "github.com/example/core-platform/backend/core-api/internal/messaging/memory"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipsmemory "github.com/example/core-platform/backend/core-api/internal/relationships/memory"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
@@ -26,6 +29,15 @@ import (
 	usersmemory "github.com/example/core-platform/backend/core-api/internal/users/memory"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 )
+
+// noopRealtime satisfies messaging.Realtime without a real Redis - these
+// router tests exercise HTTP wiring and cross-module auth, not realtime
+// delivery (that's messaging's own package tests).
+type noopRealtime struct{}
+
+func (noopRealtime) ToUser(ctx context.Context, userID string, payload json.RawMessage) error {
+	return nil
+}
 
 func newTestHandler() http.Handler {
 	return New(
@@ -38,6 +50,7 @@ func newTestHandler() http.Handler {
 		tenants.NewService(tenantsmemory.New()),
 		relationships.NewService(relationshipsmemory.New()),
 		groups.NewService(groupsmemory.New()),
+		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
 	)
 }
 
@@ -271,6 +284,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		tenants.NewService(tenantsmemory.New()),
 		relationships.NewService(relationshipsmemory.New()),
 		groups.NewService(groupsmemory.New()),
+		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

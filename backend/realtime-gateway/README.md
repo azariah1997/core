@@ -19,6 +19,10 @@ On accept, the server sends `{"type":"connected","connectionId","userId","device
 
 The server pings idle connections every 25s and expects a pong or any client activity within 70s, or the connection is dropped.
 
+### Server-initiated pushes from other services
+
+Not every message a client receives originates from a `publish`/`direct` client action. Any service holding a `platformkit/rtbus.Publisher` on the same Redis can push directly - `core-api`'s messaging module (Phase 11) does exactly this: `Service.SendMessage` publishes a `{"type":"message.new","conversationId","message":{...}}` payload to every other conversation member via `rtbus.Publisher.ToUser`, and a connected client receives it verbatim with no `subscribe` or other action required. `core-api` and `realtime-gateway` never call each other directly - Redis pub/sub (`packages/go/platformkit/rtbus`) is the only thing connecting them, which is also why the wire envelope lives in a shared platformkit package rather than being private to this service's `hub` package.
+
 ## Packages
 
 - `internal/ws` - the connection handler: HTTP hijack + RFC6455 handshake (`handler.go`), frame read/write (`frame.go`), the client/server message shapes (`messages.go`), and per-request auth context (`auth.go`). All writes to a connection's socket - data frames, ping, pong replies - funnel through one `writeLoop` goroutine; `net.Conn` only guarantees safety for one concurrent reader and one concurrent writer, not two writers, so nothing else is allowed to write directly.

@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/example/core-platform/backend/core-api/internal/api"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationspg "github.com/example/core-platform/backend/core-api/internal/applications/postgres"
@@ -19,6 +21,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	"github.com/example/core-platform/backend/core-api/internal/identity/keycloak"
 	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/messaging"
+	messagingpg "github.com/example/core-platform/backend/core-api/internal/messaging/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipspg "github.com/example/core-platform/backend/core-api/internal/relationships/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
@@ -29,6 +33,7 @@ import (
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
 	"github.com/example/core-platform/packages/go/platformkit/pg"
+	"github.com/example/core-platform/packages/go/platformkit/rtbus"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
 )
 
@@ -62,6 +67,16 @@ func main() {
 	}
 	defer pool.Close()
 
+	// core-api's first Redis client (Valkey was health-checked over TCP
+	// only until now): messaging needs it to push new messages to
+	// realtime-gateway's hub over the shared rtbus pub/sub contract.
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		logger.Error("failed to connect to redis/valkey", "error", err)
+		os.Exit(1)
+	}
+	defer func() { _ = redisClient.Close() }()
+
 	apps := applications.NewService(applicationspg.New(pool))
 
 	keycloakProvider, err := keycloak.New(ctx, keycloak.Config{
@@ -88,8 +103,9 @@ func main() {
 	tenantsSvc := tenants.NewService(tenantspg.New(pool))
 	relationshipsSvc := relationships.NewService(relationshipspg.New(pool))
 	groupsSvc := groups.NewService(groupspg.New(pool))
+	messagingSvc := messaging.NewService(messagingpg.New(pool), rtbus.NewPublisher(redisClient), logger)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc))
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

@@ -147,6 +147,27 @@ channels:
                 targetUserId: { type: string }
                 type: { type: string, description: Product-defined relationship type (e.g. "friend", "follow") - never a fixed platform concept. }
                 status: { type: string, enum: [pending, active, blocked, ended] }
+  messageSent:
+    address: message.sent.v1
+    messages:
+      messageSent:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: message.sent }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data:
+              type: object
+              required: [id, conversationId, senderId, type]
+              properties:
+                id: { type: string }
+                conversationId: { type: string }
+                senderId: { type: string }
+                type: { type: string, description: Product-defined message type (e.g. "TEXT", "IMAGE", "STICKER") - extensible, never a fixed platform enum. }
 operations:
   publishUserCreated:
     action: send
@@ -169,3 +190,6 @@ operations:
   publishApplicationUpdated:
     action: send
     channel: { $ref: '#/channels/applicationUpdated' }
+  publishMessageSent:
+    action: send
+    channel: { $ref: '#/channels/messageSent' }
