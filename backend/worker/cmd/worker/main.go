@@ -6,9 +6,13 @@ import (
 	"os"
 	"time"
 
+	temporalclient "go.temporal.io/sdk/client"
+	temporalworker "go.temporal.io/sdk/worker"
+
 	"github.com/example/core-platform/backend/worker/internal/indexer"
 	"github.com/example/core-platform/backend/worker/internal/jobrunner"
 	"github.com/example/core-platform/backend/worker/internal/jobrunner/handlers"
+	"github.com/example/core-platform/backend/worker/internal/workflows"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
@@ -17,6 +21,7 @@ import (
 	"github.com/example/core-platform/packages/go/platformkit/pg"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
 	"github.com/example/core-platform/packages/go/platformkit/searchidx"
+	"github.com/example/core-platform/packages/go/platformkit/workflowkit"
 )
 
 const serviceName = "worker"
@@ -75,10 +80,25 @@ func main() {
 	jobRunner.Register("echo", handlers.Echo(logger))
 	jobRunner.Register("webhook", handlers.Webhook(nil))
 
+	temporalConn, err := temporalclient.Dial(temporalclient.Options{HostPort: cfg.TemporalAddr})
+	if err != nil {
+		logger.Error("failed to connect to temporal", "error", err)
+		os.Exit(1)
+	}
+	defer temporalConn.Close()
+	temporalWorker := temporalworker.New(temporalConn, workflowkit.TaskQueue, temporalworker.Options{})
+	workflows.Register(temporalWorker)
+	if err := temporalWorker.Start(); err != nil {
+		logger.Error("failed to start temporal worker", "error", err)
+		os.Exit(1)
+	}
+	defer temporalWorker.Stop()
+
 	dependencyChecks := func(ctx context.Context) []health.Result {
 		return []health.Result{
 			health.TCP(ctx, health.Check{Name: "kafka", Address: cfg.KafkaBrokers[0]}),
 			health.TCP(ctx, health.Check{Name: "postgres", Address: cfg.PostgresDSN}),
+			health.TCP(ctx, health.Check{Name: "temporal", Address: cfg.TemporalAddr}),
 		}
 	}
 

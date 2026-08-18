@@ -35,6 +35,8 @@ import (
 	tenantsmemory "github.com/example/core-platform/backend/core-api/internal/tenants/memory"
 	"github.com/example/core-platform/backend/core-api/internal/users"
 	usersmemory "github.com/example/core-platform/backend/core-api/internal/users/memory"
+	"github.com/example/core-platform/backend/core-api/internal/workflows"
+	workflowsmemory "github.com/example/core-platform/backend/core-api/internal/workflows/memory"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/searchidx"
 )
@@ -79,6 +81,22 @@ func (noopSearchProvider) Query(ctx context.Context, params searchidx.QueryParam
 	return searchidx.QueryResult{}, nil
 }
 
+// noopTemporalClient satisfies workflows.TemporalClient without a real
+// Temporal server - these router tests exercise HTTP wiring and
+// cross-module auth, not workflow execution (that's workflows' own
+// package tests, and this phase's live validation against real Temporal).
+type noopTemporalClient struct{}
+
+func (noopTemporalClient) Start(ctx context.Context, workflowID, workflowType, taskQueue, cronSchedule string, payload map[string]any) (string, error) {
+	return "run-" + workflowID, nil
+}
+func (noopTemporalClient) Describe(ctx context.Context, workflowID, runID string) (workflows.Execution, error) {
+	return workflows.Execution{Status: workflows.StatusRunning}, nil
+}
+func (noopTemporalClient) Signal(ctx context.Context, workflowID, runID, signalName string, payload map[string]any) error {
+	return nil
+}
+
 func newTestHandler() http.Handler {
 	authzSvc := authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider())
 	return New(
@@ -96,6 +114,7 @@ func newTestHandler() http.Handler {
 		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
 		search.NewService(noopSearchProvider{}, authzSvc),
 		jobs.NewService(jobsmemory.New(), authzSvc),
+		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
 	)
 }
 
@@ -334,6 +353,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
 		search.NewService(noopSearchProvider{}, authzSvc),
 		jobs.NewService(jobsmemory.New(), authzSvc),
+		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

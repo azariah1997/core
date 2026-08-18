@@ -17,6 +17,7 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/search"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
 	"github.com/example/core-platform/backend/core-api/internal/users"
+	"github.com/example/core-platform/backend/core-api/internal/workflows"
 	"github.com/example/core-platform/packages/go/platformkit/apperr"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
@@ -26,7 +27,7 @@ import (
 
 const serviceName = "core-api"
 
-func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Service, usersSvc *users.Service, devicesSvc *devices.Service, authzSvc *authz.Service, tenantsSvc *tenants.Service, relationshipsSvc *relationships.Service, groupsSvc *groups.Service, messagingSvc *messaging.Service, notificationsSvc *notifications.Service, filesSvc *files.Service, searchSvc *search.Service, jobsSvc *jobs.Service) http.Handler {
+func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Service, usersSvc *users.Service, devicesSvc *devices.Service, authzSvc *authz.Service, tenantsSvc *tenants.Service, relationshipsSvc *relationships.Service, groupsSvc *groups.Service, messagingSvc *messaging.Service, notificationsSvc *notifications.Service, filesSvc *files.Service, searchSvc *search.Service, jobsSvc *jobs.Service, workflowsSvc *workflows.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /livez", health.Live(serviceName))
@@ -45,6 +46,7 @@ func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Se
 	files.RegisterRoutes(mux, filesSvc, requireUser(identitySvc, usersSvc))
 	search.RegisterRoutes(mux, searchSvc, requireUser(identitySvc, usersSvc))
 	jobs.RegisterRoutes(mux, jobsSvc, requireUser(identitySvc, usersSvc))
+	workflows.RegisterRoutes(mux, workflowsSvc, requireUser(identitySvc, usersSvc))
 
 	mux.HandleFunc("GET /v1/platform", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, 200, map[string]any{"name": cfg.PlatformName, "environment": cfg.Env, "apiVersion": "v1"})
@@ -69,6 +71,7 @@ func dependencyChecks(cfg config.Config) health.Checks {
 			health.TCP(ctx, health.Check{Name: "postgres", Address: cfg.PostgresDSN}),
 			health.TCP(ctx, health.Check{Name: "valkey", Address: cfg.RedisAddr}),
 			health.TCP(ctx, health.Check{Name: "kafka", Address: cfg.KafkaBrokers[0]}),
+			health.TCP(ctx, health.Check{Name: "temporal", Address: cfg.TemporalAddr}),
 		}
 	}
 }

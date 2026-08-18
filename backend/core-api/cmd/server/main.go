@@ -38,6 +38,9 @@ import (
 	tenantspg "github.com/example/core-platform/backend/core-api/internal/tenants/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/users"
 	userspg "github.com/example/core-platform/backend/core-api/internal/users/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/workflows"
+	workflowspg "github.com/example/core-platform/backend/core-api/internal/workflows/postgres"
+	workflowstemporal "github.com/example/core-platform/backend/core-api/internal/workflows/temporal"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
@@ -144,7 +147,15 @@ func main() {
 
 	jobsSvc := jobs.NewService(jobspg.New(pool), authzSvc)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc))
+	temporalClient, err := workflowstemporal.New(workflowstemporal.Config{HostPort: cfg.TemporalAddr})
+	if err != nil {
+		logger.Error("failed to connect to temporal", "error", err)
+		os.Exit(1)
+	}
+	defer temporalClient.Close()
+	workflowsSvc := workflows.NewService(workflowspg.New(pool), temporalClient, authzSvc)
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

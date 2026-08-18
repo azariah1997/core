@@ -10,6 +10,8 @@ require (
 	github.com/jackc/pgx/v5 v5.10.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/opensearch-project/opensearch-go/v4 v4.7.3 // indirect
+	github.com/stretchr/testify v1.12.0 // indirect
+	go.temporal.io/sdk v1.48.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.40.0 // indirect
 )
