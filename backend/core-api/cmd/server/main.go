@@ -31,6 +31,7 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/notifications/senders"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipspg "github.com/example/core-platform/backend/core-api/internal/relationships/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/search"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
 	tenantspg "github.com/example/core-platform/backend/core-api/internal/tenants/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/users"
@@ -41,6 +42,7 @@ import (
 	"github.com/example/core-platform/packages/go/platformkit/pg"
 	"github.com/example/core-platform/packages/go/platformkit/rtbus"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
+	"github.com/example/core-platform/packages/go/platformkit/searchidx"
 )
 
 const serviceName = "core-api"
@@ -129,7 +131,16 @@ func main() {
 	}
 	filesSvc := files.NewService(filespg.New(pool), objectStore, authzSvc, files.Config{})
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc))
+	searchProvider, err := searchidx.NewOpenSearchProvider(ctx, searchidx.OpenSearchConfig{
+		Addresses: []string{cfg.OpenSearchURL}, Index: searchidx.DefaultIndex,
+	})
+	if err != nil {
+		logger.Error("failed to initialise opensearch provider", "error", err)
+		os.Exit(1)
+	}
+	searchSvc := search.NewService(searchProvider, authzSvc)
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

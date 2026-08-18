@@ -6,15 +6,25 @@ import (
 	"os"
 	"time"
 
+	"github.com/example/core-platform/backend/worker/internal/indexer"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
+	"github.com/example/core-platform/packages/go/platformkit/pg"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
+	"github.com/example/core-platform/packages/go/platformkit/searchidx"
 )
 
 const serviceName = "worker"
+
+// indexerPollInterval trades a little indexing latency (new documents
+// take up to this long to become searchable) for not hammering Postgres
+// with a tight poll loop - fine for a local/single-replica indexer; a
+// LISTEN/NOTIFY or Kafka-driven trigger would remove the latency
+// entirely, deferred until a real need for lower latency shows up.
+const indexerPollInterval = 2 * time.Second
 
 func main() {
 	cfg := config.Load()
@@ -37,8 +47,27 @@ func main() {
 	}
 	defer func() { _ = shutdownTracing(context.Background()) }()
 
+	pool, err := pg.Connect(ctx, cfg.PostgresDSN)
+	if err != nil {
+		logger.Error("failed to connect to postgres", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	searchProvider, err := searchidx.NewOpenSearchProvider(ctx, searchidx.OpenSearchConfig{
+		Addresses: []string{cfg.OpenSearchURL}, Index: searchidx.DefaultIndex,
+	})
+	if err != nil {
+		logger.Error("failed to initialise opensearch provider", "error", err)
+		os.Exit(1)
+	}
+	docIndexer := indexer.New(pool, searchProvider, logger)
+
 	dependencyChecks := func(ctx context.Context) []health.Result {
-		return []health.Result{health.TCP(ctx, health.Check{Name: "kafka", Address: cfg.KafkaBrokers[0]})}
+		return []health.Result{
+			health.TCP(ctx, health.Check{Name: "kafka", Address: cfg.KafkaBrokers[0]}),
+			health.TCP(ctx, health.Check{Name: "postgres", Address: cfg.PostgresDSN}),
+		}
 	}
 
 	mux := http.NewServeMux()
@@ -52,12 +81,19 @@ func main() {
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
-		ticker := time.NewTicker(30 * time.Second)
+		ticker := time.NewTicker(indexerPollInterval)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				logger.Info("worker heartbeat", "brokers", cfg.KafkaBrokers)
+				processed, err := docIndexer.PollOnce(ctx)
+				if err != nil {
+					logger.Error("search indexer poll failed", "error", err)
+					continue
+				}
+				if processed > 0 {
+					logger.Info("search indexer processed events", "count", processed)
+				}
 			case <-stop:
 				return
 			}

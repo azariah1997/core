@@ -1,6 +1,6 @@
 module github.com/example/core-platform/packages/go/platformkit
 
-go 1.25.0
+go 1.25.9
 
 require (
 	github.com/MicahParks/keyfunc/v3 v3.8.1
@@ -25,6 +25,7 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/opensearch-project/opensearch-go/v4 v4.7.3 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.45.0 // indirect
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect

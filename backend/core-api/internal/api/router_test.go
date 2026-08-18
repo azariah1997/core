@@ -28,11 +28,13 @@ import (
 	notificationsmemory "github.com/example/core-platform/backend/core-api/internal/notifications/memory"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipsmemory "github.com/example/core-platform/backend/core-api/internal/relationships/memory"
+	"github.com/example/core-platform/backend/core-api/internal/search"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
 	tenantsmemory "github.com/example/core-platform/backend/core-api/internal/tenants/memory"
 	"github.com/example/core-platform/backend/core-api/internal/users"
 	usersmemory "github.com/example/core-platform/backend/core-api/internal/users/memory"
 	"github.com/example/core-platform/packages/go/platformkit/config"
+	"github.com/example/core-platform/packages/go/platformkit/searchidx"
 )
 
 // noopRealtime satisfies messaging.Realtime without a real Redis - these
@@ -61,6 +63,20 @@ func (noopObjectStore) HeadObject(ctx context.Context, objectKey string) (int64,
 }
 func (noopObjectStore) DeleteObject(ctx context.Context, objectKey string) error { return nil }
 
+// noopSearchProvider satisfies searchidx.Provider without a real
+// OpenSearch - these router tests exercise HTTP wiring and cross-module
+// auth, not indexing/search (that's search's own package tests, and this
+// phase's live validation against real OpenSearch).
+type noopSearchProvider struct{}
+
+func (noopSearchProvider) Index(ctx context.Context, doc searchidx.Document) error { return nil }
+func (noopSearchProvider) Delete(ctx context.Context, docType, appID, id string) error {
+	return nil
+}
+func (noopSearchProvider) Query(ctx context.Context, params searchidx.QueryParams) (searchidx.QueryResult, error) {
+	return searchidx.QueryResult{}, nil
+}
+
 func newTestHandler() http.Handler {
 	authzSvc := authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider())
 	return New(
@@ -76,6 +92,7 @@ func newTestHandler() http.Handler {
 		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
 		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
 		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
+		search.NewService(noopSearchProvider{}, authzSvc),
 	)
 }
 
@@ -312,6 +329,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
 		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
 		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
+		search.NewService(noopSearchProvider{}, authzSvc),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")
