@@ -14,6 +14,8 @@ import (
 	authzpg "github.com/example/core-platform/backend/core-api/internal/authz/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicespg "github.com/example/core-platform/backend/core-api/internal/devices/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/groups"
+	groupspg "github.com/example/core-platform/backend/core-api/internal/groups/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	"github.com/example/core-platform/backend/core-api/internal/identity/keycloak"
 	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
@@ -85,8 +87,9 @@ func main() {
 	authzSvc := authz.NewService(authzpg.New(pool), openfgaProvider)
 	tenantsSvc := tenants.NewService(tenantspg.New(pool))
 	relationshipsSvc := relationships.NewService(relationshipspg.New(pool))
+	groupsSvc := groups.NewService(groupspg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc))
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

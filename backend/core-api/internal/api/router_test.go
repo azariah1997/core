@@ -14,6 +14,8 @@ import (
 	authzmemory "github.com/example/core-platform/backend/core-api/internal/authz/memory"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicesmemory "github.com/example/core-platform/backend/core-api/internal/devices/memory"
+	"github.com/example/core-platform/backend/core-api/internal/groups"
+	groupsmemory "github.com/example/core-platform/backend/core-api/internal/groups/memory"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	identitymemory "github.com/example/core-platform/backend/core-api/internal/identity/memory"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
@@ -35,6 +37,7 @@ func newTestHandler() http.Handler {
 		authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider()),
 		tenants.NewService(tenantsmemory.New()),
 		relationships.NewService(relationshipsmemory.New()),
+		groups.NewService(groupsmemory.New()),
 	)
 }
 
@@ -267,6 +270,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		authzSvc,
 		tenants.NewService(tenantsmemory.New()),
 		relationships.NewService(relationshipsmemory.New()),
+		groups.NewService(groupsmemory.New()),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

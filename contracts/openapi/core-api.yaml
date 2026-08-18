@@ -283,6 +283,122 @@ paths:
       responses:
         '200': { description: Relationship is now blocked, content: { application/json: { schema: { $ref: '#/components/schemas/Relationship' } } } }
         '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /groups:
+    post:
+      operationId: createGroup
+      description: Any authenticated caller may create a group, becoming its first manager. Friend circles, families, teams, communities, workspaces, guilds are all the same resource - the platform never hardcodes one use case.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateGroup' }
+      responses:
+        '201': { description: Group created, content: { application/json: { schema: { $ref: '#/components/schemas/Group' } } } }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: listMyGroups
+      description: Groups the caller is a member of.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The caller's groups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/Group' } }
+  /groups/{id}:
+    get:
+      operationId: getGroup
+      description: Visible to members only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Group, content: { application/json: { schema: { $ref: '#/components/schemas/Group' } } } }
+        '403': { description: Not a member of this group, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    patch:
+      operationId: updateGroup
+      description: Requires manager permission.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateGroup' }
+      responses:
+        '200': { description: Updated group, content: { application/json: { schema: { $ref: '#/components/schemas/Group' } } } }
+        '403': { description: Manager permission required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /groups/{id}/members:
+    get:
+      operationId: listGroupMembers
+      description: Visible to members only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Group members
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items: { type: array, items: { $ref: '#/components/schemas/GroupMember' } }
+        '403': { description: Not a member of this group, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      operationId: addGroupMember
+      description: Requires manager permission.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddGroupMember' }
+      responses:
+        '201': { description: Membership created, content: { application/json: { schema: { $ref: '#/components/schemas/GroupMember' } } } }
+        '403': { description: Manager permission required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: User is already a member, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /groups/{id}/members/{userId}:
+    patch:
+      operationId: updateGroupMember
+      description: Changes a member's role label and/or manager permission. Requires manager permission - a plain member can never grant themselves or anyone else manager status.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateGroupMember' }
+      responses:
+        '200': { description: Updated membership, content: { application/json: { schema: { $ref: '#/components/schemas/GroupMember' } } } }
+        '403': { description: Manager permission required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      operationId: removeGroupMember
+      description: A member may remove themselves; removing anyone else requires manager permission.
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Removed }
+        '403': { description: Manager permission required, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /data/query:
     post:
       deprecated: true
@@ -447,6 +563,54 @@ components:
       properties:
         userId: { type: string, format: uuid }
         role: { type: string, enum: [owner, admin, member] }
+    Group:
+      type: object
+      required: [id, appId, name, status, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        appId: { type: string, format: uuid }
+        name: { type: string }
+        status: { type: string, enum: [active, archived] }
+        metadata: { type: object, additionalProperties: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    CreateGroup:
+      type: object
+      required: [appId, name]
+      properties:
+        appId: { type: string, format: uuid }
+        name: { type: string }
+        metadata: { type: object, additionalProperties: true }
+    UpdateGroup:
+      type: object
+      description: At least one field is required.
+      properties:
+        name: { type: string }
+        status: { type: string, enum: [active, archived] }
+        metadata: { type: object, additionalProperties: true }
+    GroupMember:
+      type: object
+      required: [id, groupId, userId, role, isManager, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        groupId: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        role: { type: string, description: Product-defined free-form label (e.g. "parent", "leader", "officer") - purely descriptive, never used for authorization. }
+        isManager: { type: boolean, description: The one structural permission bit - independent of role. }
+        createdAt: { type: string, format: date-time }
+    AddGroupMember:
+      type: object
+      required: [userId]
+      properties:
+        userId: { type: string, format: uuid }
+        role: { type: string }
+        isManager: { type: boolean }
+    UpdateGroupMember:
+      type: object
+      description: At least one field is required.
+      properties:
+        role: { type: string }
+        isManager: { type: boolean }
     Relationship:
       type: object
       required: [id, appId, requesterUserId, targetUserId, type, status, createdAt, updatedAt]
