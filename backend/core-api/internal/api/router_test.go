@@ -22,6 +22,8 @@ import (
 	groupsmemory "github.com/example/core-platform/backend/core-api/internal/groups/memory"
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	identitymemory "github.com/example/core-platform/backend/core-api/internal/identity/memory"
+	"github.com/example/core-platform/backend/core-api/internal/jobs"
+	jobsmemory "github.com/example/core-platform/backend/core-api/internal/jobs/memory"
 	"github.com/example/core-platform/backend/core-api/internal/messaging"
 	messagingmemory "github.com/example/core-platform/backend/core-api/internal/messaging/memory"
 	"github.com/example/core-platform/backend/core-api/internal/notifications"
@@ -93,6 +95,7 @@ func newTestHandler() http.Handler {
 		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
 		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
 		search.NewService(noopSearchProvider{}, authzSvc),
+		jobs.NewService(jobsmemory.New(), authzSvc),
 	)
 }
 
@@ -330,6 +333,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
 		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
 		search.NewService(noopSearchProvider{}, authzSvc),
+		jobs.NewService(jobsmemory.New(), authzSvc),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

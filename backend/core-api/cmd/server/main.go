@@ -24,6 +24,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/identity"
 	"github.com/example/core-platform/backend/core-api/internal/identity/keycloak"
 	identitypg "github.com/example/core-platform/backend/core-api/internal/identity/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/jobs"
+	jobspg "github.com/example/core-platform/backend/core-api/internal/jobs/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/messaging"
 	messagingpg "github.com/example/core-platform/backend/core-api/internal/messaging/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/notifications"
@@ -140,7 +142,9 @@ func main() {
 	}
 	searchSvc := search.NewService(searchProvider, authzSvc)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc))
+	jobsSvc := jobs.NewService(jobspg.New(pool), authzSvc)
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

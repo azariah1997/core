@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/example/core-platform/backend/worker/internal/indexer"
+	"github.com/example/core-platform/backend/worker/internal/jobrunner"
+	"github.com/example/core-platform/backend/worker/internal/jobrunner/handlers"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
@@ -25,6 +27,12 @@ const serviceName = "worker"
 // LISTEN/NOTIFY or Kafka-driven trigger would remove the latency
 // entirely, deferred until a real need for lower latency shows up.
 const indexerPollInterval = 2 * time.Second
+
+// jobPollInterval is shorter than the search indexer's - jobs (a
+// "delayed" webhook, for instance) are more latency-sensitive than
+// search freshness, and claiming is cheap (a single indexed query) even
+// when there's nothing due.
+const jobPollInterval = 1 * time.Second
 
 func main() {
 	cfg := config.Load()
@@ -63,6 +71,10 @@ func main() {
 	}
 	docIndexer := indexer.New(pool, searchProvider, logger)
 
+	jobRunner := jobrunner.New(pool, logger)
+	jobRunner.Register("echo", handlers.Echo(logger))
+	jobRunner.Register("webhook", handlers.Webhook(nil))
+
 	dependencyChecks := func(ctx context.Context) []health.Result {
 		return []health.Result{
 			health.TCP(ctx, health.Check{Name: "kafka", Address: cfg.KafkaBrokers[0]}),
@@ -93,6 +105,25 @@ func main() {
 				}
 				if processed > 0 {
 					logger.Info("search indexer processed events", "count", processed)
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+	go func() {
+		ticker := time.NewTicker(jobPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				processed, err := jobRunner.PollOnce(ctx)
+				if err != nil {
+					logger.Error("job runner poll failed", "error", err)
+					continue
+				}
+				if processed > 0 {
+					logger.Info("job runner processed jobs", "count", processed)
 				}
 			case <-stop:
 				return
