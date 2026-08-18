@@ -2,25 +2,33 @@ package main
 
 import (
 	"context"
-	"crypto/sha1"
-	"encoding/base64"
-	"encoding/binary"
-	"io"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
+	"github.com/example/core-platform/backend/realtime-gateway/internal/hub"
+	"github.com/example/core-platform/backend/realtime-gateway/internal/identity"
+	"github.com/example/core-platform/backend/realtime-gateway/internal/presence"
+	"github.com/example/core-platform/backend/realtime-gateway/internal/ws"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
+	"github.com/example/core-platform/packages/go/platformkit/jwtverify"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
+	"github.com/example/core-platform/packages/go/platformkit/pg"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
 )
 
-const magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 const serviceName = "realtime-gateway"
+
+// presenceTTL bounds how stale presence can get before a connection that
+// died without a clean close (crash, network partition) ages out - never
+// stored in Postgres, matching "critical realtime data should remain
+// ephemeral".
+const presenceTTL = 45 * time.Second
 
 func main() {
 	cfg := config.Load()
@@ -43,14 +51,45 @@ func main() {
 	}
 	defer func() { _ = shutdownTracing(context.Background()) }()
 
+	// Read-only: realtime-gateway never writes to Postgres, only resolves
+	// an authenticated identity to the platform user ID everything else
+	// in the system already addresses users by.
+	pool, err := pg.Connect(ctx, cfg.PostgresDSN)
+	if err != nil {
+		logger.Error("failed to connect to postgres", "error", err)
+		os.Exit(1)
+	}
+	defer pool.Close()
+
+	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		logger.Error("failed to connect to redis/valkey", "error", err)
+		os.Exit(1)
+	}
+	defer func() { _ = redisClient.Close() }()
+
+	verifier, err := jwtverify.New(ctx, jwtverify.Config{Issuer: cfg.JWTIssuer, Audience: cfg.JWTAudience})
+	if err != nil {
+		logger.Error("failed to initialise jwt verifier", "error", err)
+		os.Exit(1)
+	}
+	resolver := identity.NewResolver(pool)
+	presenceTracker := presence.New(redisClient, presenceTTL)
+	realtimeHub := hub.New(redisClient, logger)
+
+	hubCtx, cancelHub := context.WithCancel(ctx)
+	defer cancelHub()
+	go realtimeHub.Run(hubCtx)
+
+	dependencyChecks := func(ctx context.Context) []health.Result {
+		return []health.Result{health.TCP(ctx, health.Check{Name: "redis", Address: cfg.RedisAddr})}
+	}
+
 	mux := http.NewServeMux()
-	// The realtime gateway has no external dependency it must gate
-	// traffic on today; readiness tracks liveness until presence/session
-	// stores are wired in Phase 10.
 	mux.HandleFunc("GET /livez", health.Live(serviceName))
-	mux.HandleFunc("GET /readyz", health.Ready(nil))
-	mux.HandleFunc("GET /healthz", health.Health(serviceName, nil))
-	mux.HandleFunc("GET /ws", ws)
+	mux.HandleFunc("GET /readyz", health.Ready(dependencyChecks))
+	mux.HandleFunc("GET /healthz", health.Health(serviceName, dependencyChecks))
+	mux.Handle("GET /ws", wsAuthMiddleware(verifier, resolver)(ws.NewHandler(realtimeHub, presenceTracker, logger)))
 
 	handler := otelx.Wrap(serviceName, correlation.Middleware(mux))
 	srv := &http.Server{Addr: cfg.RealtimeAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
@@ -59,104 +98,4 @@ func main() {
 		logger.Error("server error", "error", err)
 		os.Exit(1)
 	}
-}
-
-func ws(w http.ResponseWriter, r *http.Request) {
-	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
-		http.Error(w, "websocket upgrade required", 426)
-		return
-	}
-	key := r.Header.Get("Sec-WebSocket-Key")
-	if key == "" {
-		http.Error(w, "missing key", 400)
-		return
-	}
-	h := sha1.Sum([]byte(key + magic))
-	accept := base64.StdEncoding.EncodeToString(h[:])
-	hj, ok := w.(http.Hijacker)
-	if !ok {
-		http.Error(w, "hijacking unsupported", 500)
-		return
-	}
-	conn, buf, err := hj.Hijack()
-	if err != nil {
-		return
-	}
-	defer conn.Close()
-	_, _ = buf.WriteString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + "\r\n\r\n")
-	_ = buf.Flush()
-	_ = writeText(conn, `{"type":"platform.connected","version":1}`)
-	for {
-		opcode, payload, err := readFrame(conn)
-		if err != nil {
-			return
-		}
-		if opcode == 8 {
-			return
-		}
-		if opcode == 9 {
-			_ = writeFrame(conn, 10, payload)
-			continue
-		}
-		if opcode == 1 {
-			_ = writeText(conn, string(payload))
-		}
-	}
-}
-
-func readFrame(r io.Reader) (byte, []byte, error) {
-	h := make([]byte, 2)
-	if _, e := io.ReadFull(r, h); e != nil {
-		return 0, nil, e
-	}
-	op := h[0] & 0x0f
-	masked := h[1]&0x80 != 0
-	n := int(h[1] & 0x7f)
-	if n == 126 {
-		b := make([]byte, 2)
-		if _, e := io.ReadFull(r, b); e != nil {
-			return 0, nil, e
-		}
-		n = int(binary.BigEndian.Uint16(b))
-	}
-	if n == 127 {
-		b := make([]byte, 8)
-		if _, e := io.ReadFull(r, b); e != nil {
-			return 0, nil, e
-		}
-		n = int(binary.BigEndian.Uint64(b))
-	}
-	mask := make([]byte, 4)
-	if masked {
-		if _, e := io.ReadFull(r, mask); e != nil {
-			return 0, nil, e
-		}
-	}
-	p := make([]byte, n)
-	if _, e := io.ReadFull(r, p); e != nil {
-		return 0, nil, e
-	}
-	if masked {
-		for i := range p {
-			p[i] ^= mask[i%4]
-		}
-	}
-	return op, p, nil
-}
-func writeText(w io.Writer, s string) error { return writeFrame(w, 1, []byte(s)) }
-func writeFrame(w io.Writer, op byte, p []byte) error {
-	h := []byte{0x80 | op}
-	n := len(p)
-	if n < 126 {
-		h = append(h, byte(n))
-	} else if n <= 65535 {
-		h = append(h, 126, byte(n>>8), byte(n))
-	} else {
-		h = append(h, 127, 0, 0, 0, 0, byte(n>>24), byte(n>>16), byte(n>>8), byte(n))
-	}
-	if _, e := w.Write(h); e != nil {
-		return e
-	}
-	_, e := w.Write(p)
-	return e
 }
