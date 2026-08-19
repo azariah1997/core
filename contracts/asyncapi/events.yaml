@@ -253,8 +253,44 @@ channels:
                 ownerUserId: { type: string }
                 mimeType: { type: string }
                 byteSize: { type: integer }
+  configUpdated:
+    address: config.updated.v1
+    messages:
+      configUpdated:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: config.updated }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data: { $ref: '#/components/schemas/configChangeRef' }
+  configDeleted:
+    address: config.deleted.v1
+    messages:
+      configDeleted:
+        payload:
+          type: object
+          required: [id, type, version, source, occurredAt, data]
+          properties:
+            id: { type: string }
+            type: { const: config.deleted }
+            version: { const: 1 }
+            source: { type: string }
+            occurredAt: { type: string, format: date-time }
+            data: { $ref: '#/components/schemas/configChangeRef' }
 components:
   schemas:
+    configChangeRef:
+      type: object
+      required: [appId, environment, key]
+      properties:
+        appId: { type: string }
+        environment: { type: string }
+        key: { type: string }
+        changedBy: { type: string }
     notificationDeliveryOutcome:
       type: object
       required: [deliveryId, notificationId, channel, status]
@@ -303,3 +339,9 @@ operations:
   publishFileUploaded:
     action: send
     channel: { $ref: '#/channels/fileUploaded' }
+  publishConfigUpdated:
+    action: send
+    channel: { $ref: '#/channels/configUpdated' }
+  publishConfigDeleted:
+    action: send
+    channel: { $ref: '#/channels/configDeleted' }

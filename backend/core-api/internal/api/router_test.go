@@ -32,6 +32,8 @@ import (
 	notificationsmemory "github.com/example/core-platform/backend/core-api/internal/notifications/memory"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipsmemory "github.com/example/core-platform/backend/core-api/internal/relationships/memory"
+	"github.com/example/core-platform/backend/core-api/internal/remoteconfig"
+	remoteconfigmemory "github.com/example/core-platform/backend/core-api/internal/remoteconfig/memory"
 	"github.com/example/core-platform/backend/core-api/internal/search"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
 	tenantsmemory "github.com/example/core-platform/backend/core-api/internal/tenants/memory"
@@ -118,6 +120,7 @@ func newTestHandler() http.Handler {
 		jobs.NewService(jobsmemory.New(), authzSvc),
 		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
 		features.NewService(featuresmemory.New(), authzSvc),
+		remoteconfig.NewService(remoteconfigmemory.New(), authzSvc),
 	)
 }
 
@@ -358,6 +361,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		jobs.NewService(jobsmemory.New(), authzSvc),
 		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
 		features.NewService(featuresmemory.New(), authzSvc),
+		remoteconfig.NewService(remoteconfigmemory.New(), authzSvc),
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

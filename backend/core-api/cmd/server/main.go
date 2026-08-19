@@ -35,6 +35,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/notifications/senders"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipspg "github.com/example/core-platform/backend/core-api/internal/relationships/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/remoteconfig"
+	remoteconfigpg "github.com/example/core-platform/backend/core-api/internal/remoteconfig/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/search"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
 	tenantspg "github.com/example/core-platform/backend/core-api/internal/tenants/postgres"
@@ -159,7 +161,9 @@ func main() {
 
 	featuresSvc := features.NewService(featurespg.New(pool), authzSvc)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc))
+	remoteConfigSvc := remoteconfig.NewService(remoteconfigpg.New(pool), authzSvc)
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {
