@@ -9,10 +9,12 @@ import (
 	temporalclient "go.temporal.io/sdk/client"
 	temporalworker "go.temporal.io/sdk/worker"
 
+	"github.com/example/core-platform/backend/worker/internal/analyticspipeline"
 	"github.com/example/core-platform/backend/worker/internal/indexer"
 	"github.com/example/core-platform/backend/worker/internal/jobrunner"
 	"github.com/example/core-platform/backend/worker/internal/jobrunner/handlers"
 	"github.com/example/core-platform/backend/worker/internal/workflows"
+	"github.com/example/core-platform/packages/go/platformkit/blobstore"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
@@ -38,6 +40,13 @@ const indexerPollInterval = 2 * time.Second
 // search freshness, and claiming is cheap (a single indexed query) even
 // when there's nothing due.
 const jobPollInterval = 1 * time.Second
+
+// analyticsPollInterval is the longest of the three - unlike search
+// freshness or job latency, nothing in this platform reads analytics
+// events back out for an end user waiting on a response; batching more
+// before each object storage write is a better tradeoff here than low
+// latency.
+const analyticsPollInterval = 10 * time.Second
 
 func main() {
 	cfg := config.Load()
@@ -79,6 +88,15 @@ func main() {
 	jobRunner := jobrunner.New(pool, logger)
 	jobRunner.Register("echo", handlers.Echo(logger))
 	jobRunner.Register("webhook", handlers.Webhook(nil))
+
+	blobStore, err := blobstore.New(ctx, blobstore.Config{
+		Endpoint: cfg.S3Endpoint, Bucket: cfg.S3Bucket, AccessKey: cfg.S3AccessKey, SecretKey: cfg.S3SecretKey,
+	})
+	if err != nil {
+		logger.Error("failed to initialise analytics object storage", "error", err)
+		os.Exit(1)
+	}
+	analyticsPipeline := analyticspipeline.New(pool, blobStore)
 
 	temporalConn, err := temporalclient.Dial(temporalclient.Options{HostPort: cfg.TemporalAddr})
 	if err != nil {
@@ -144,6 +162,25 @@ func main() {
 				}
 				if processed > 0 {
 					logger.Info("job runner processed jobs", "count", processed)
+				}
+			case <-stop:
+				return
+			}
+		}
+	}()
+	go func() {
+		ticker := time.NewTicker(analyticsPollInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				flushed, err := analyticsPipeline.PollOnce(ctx)
+				if err != nil {
+					logger.Error("analytics pipeline poll failed", "error", err)
+					continue
+				}
+				if flushed > 0 {
+					logger.Info("analytics pipeline flushed events", "count", flushed)
 				}
 			case <-stop:
 				return

@@ -8,6 +8,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/example/core-platform/backend/core-api/internal/analytics"
+	analyticspg "github.com/example/core-platform/backend/core-api/internal/analytics/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/api"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationspg "github.com/example/core-platform/backend/core-api/internal/applications/postgres"
@@ -227,7 +229,17 @@ func main() {
 	billingSvc := billing.NewService(billingpg.New(pool), authzSvc)
 	billingSvc.RegisterProvider(stripe.New(stripe.Config{WebhookSecret: cfg.StripeWebhookSecret}))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc, trustSafetySvc, billingSvc))
+	// Phase 23: Track is this platform's one deliberately open,
+	// unauthenticated write endpoint (see internal/api/router.go's
+	// comment on RegisterTrackRoute) - rate-limited by IP via the same
+	// ratelimit.Limiter type Phase 21 introduced, reused for an
+	// unrelated reason here (no Bearer token to key a limiter by).
+	// core-api never queries analytics_events for analytics purposes -
+	// backend/worker's analyticspipeline is what actually ships batches
+	// downstream; see internal/analytics/README.md.
+	analyticsSvc := analytics.NewService(analyticspg.New(pool), authzSvc, ratelimit.New(redisClient))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc, trustSafetySvc, billingSvc, analyticsSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

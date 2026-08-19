@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/example/core-platform/backend/core-api/internal/analytics"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	"github.com/example/core-platform/backend/core-api/internal/audit"
 	"github.com/example/core-platform/backend/core-api/internal/authz"
@@ -33,7 +34,7 @@ import (
 
 const serviceName = "core-api"
 
-func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Service, usersSvc *users.Service, devicesSvc *devices.Service, authzSvc *authz.Service, tenantsSvc *tenants.Service, relationshipsSvc *relationships.Service, groupsSvc *groups.Service, messagingSvc *messaging.Service, notificationsSvc *notifications.Service, filesSvc *files.Service, searchSvc *search.Service, jobsSvc *jobs.Service, workflowsSvc *workflows.Service, featuresSvc *features.Service, remoteConfigSvc *remoteconfig.Service, auditSvc *audit.Service, privacySvc *privacy.Service, trustSafetySvc *trustsafety.Service, billingSvc *billing.Service) http.Handler {
+func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Service, usersSvc *users.Service, devicesSvc *devices.Service, authzSvc *authz.Service, tenantsSvc *tenants.Service, relationshipsSvc *relationships.Service, groupsSvc *groups.Service, messagingSvc *messaging.Service, notificationsSvc *notifications.Service, filesSvc *files.Service, searchSvc *search.Service, jobsSvc *jobs.Service, workflowsSvc *workflows.Service, featuresSvc *features.Service, remoteConfigSvc *remoteconfig.Service, auditSvc *audit.Service, privacySvc *privacy.Service, trustSafetySvc *trustsafety.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /livez", health.Live(serviceName))
@@ -67,6 +68,12 @@ func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Se
 	// requireActive wrapper at all, the one deliberate exception. See
 	// billing/http.go's RegisterWebhookRoute and billing/README.md.
 	billing.RegisterWebhookRoute(mux, billingSvc)
+	analytics.RegisterRoutes(mux, analyticsSvc, requireActive(identitySvc, usersSvc, trustSafetySvc))
+	// Tracking is this platform's one deliberately open, unauthenticated
+	// write endpoint - no requireUser/requireActive wrapper at all,
+	// protected by IP-based rate limiting instead. See
+	// analytics/http.go's RegisterTrackRoute and analytics/README.md.
+	analytics.RegisterTrackRoute(mux, analyticsSvc)
 
 	mux.HandleFunc("GET /v1/platform", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, 200, map[string]any{"name": cfg.PlatformName, "environment": cfg.Env, "apiVersion": "v1"})

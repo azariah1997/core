@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/example/core-platform/backend/core-api/internal/analytics"
+	analyticsmemory "github.com/example/core-platform/backend/core-api/internal/analytics/memory"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationsmemory "github.com/example/core-platform/backend/core-api/internal/applications/memory"
 	"github.com/example/core-platform/backend/core-api/internal/audit"
@@ -159,6 +161,7 @@ func newTestHandler() http.Handler {
 	// (IsPlatformAdmin plus IsModerator).
 	trustSafetySvc := trustsafety.NewService(trustsafetymemory.New(), authzSvc, noopRateLimiter{})
 	billingSvc := billing.NewService(billingmemory.New(), authzSvc)
+	analyticsSvc := analytics.NewService(analyticsmemory.New(), authzSvc, noopRateLimiter{})
 
 	return New(
 		config.Load(),
@@ -182,6 +185,7 @@ func newTestHandler() http.Handler {
 		privacySvc,
 		trustSafetySvc,
 		billingSvc,
+		analyticsSvc,
 	)
 }
 
@@ -411,6 +415,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 	privacySvc := privacy.NewService(privacymemory.New(), authzSvc, noopTemporalClient{}, noopObjectStore{})
 	trustSafetySvc := trustsafety.NewService(trustsafetymemory.New(), authzSvc, noopRateLimiter{})
 	billingSvc := billing.NewService(billingmemory.New(), authzSvc)
+	analyticsSvc := analytics.NewService(analyticsmemory.New(), authzSvc, noopRateLimiter{})
 	handler := New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
@@ -433,6 +438,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		privacySvc,
 		trustSafetySvc,
 		billingSvc,
+		analyticsSvc,
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")
