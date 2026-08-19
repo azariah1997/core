@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
-"""Builds docs/control/data.xlsx - the Core Platform control-room workbook.
+"""Builds docs/control/data.xlsx - the Core Platform control-room workbook -
+and docs/control/platform.json, a machine-readable export of the same
+in-memory data (plus a fresh parse of catalog/system.yaml and
+contracts/asyncapi/events.yaml) that apps/admin's /control-plane page
+reads (Phase 29), so that page and this workbook never drift apart.
 
 Run from anywhere: python3 docs/control/build_workbook.py
 Edit the row data below, re-run, then reload docs/control/index.html.
 """
 import base64
+import datetime
+import json
 import os
 import re
 import openpyxl
+import yaml
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.table import Table, TableStyleInfo
@@ -72,9 +79,9 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "28 / 30", "93%"),
+    ("Phases complete", "29 / 30", "97%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
-    ("Frontend apps", "1", "apps/admin (Next.js 15 App Router)"),
+    ("Frontend apps", "1", "apps/admin (Next.js 15 App Router) - now includes /control-plane, Phase 29"),
     ("Developer portal", "1", "platform/backstage (real @backstage/create-app, 27-entity catalog)"),
     ("Client SDKs", "3", "Go, TypeScript, Dart - packages/go/coresdk, packages/typescript/core-sdk, packages/flutter/core_sdk"),
     ("Shared Go packages", "2", "packages/go/platformkit, packages/go/coresdk"),
@@ -82,7 +89,7 @@ stats = [
     ("Live HTTP endpoints", "147", "see 'API Endpoints' sheet"),
     ("DB migrations", "22", "data/migrations/0001-0022"),
     ("Real infra dependencies", "10", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, Ollama, OTel/Prometheus/Grafana/Loki/Tempo"),
-    ("Commits so far", "40", "see git log"),
+    ("Commits so far", "42", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -145,8 +152,8 @@ roadmap_rows = [
     (26, "Done", "Backstage", "A real @backstage/create-app instance (platform/backstage) whose catalog (catalog/system.yaml) is 24 real entities - a Group, the System, Components for all 3 services + admin + 16 domain modules with real dependsOn/providesApis, and 2 API entities embedding the full real OpenAPI/AsyncAPI specs. Filled in 11 stub module READMEs, fixed 2 real YAML bugs in the OpenAPI spec, generated ~110 missing OpenAPI paths from the actual Go route registrations, and live-validated the whole catalog loads with zero processing errors via the real catalog API.", "b1bf7b9"),
     (27, "Done", "SDKs", "Go (packages/go/coresdk), TypeScript (packages/typescript/core-sdk), and Dart (packages/flutter/core_sdk) - auth/token refresh, typed API calls, errors, pagination, GET-only retries, a real realtime WebSocket client, device registration, in all three. Each proven by a real consumer: apps/admin migrated its entire API layer to the TS SDK; apps/mobile's login/profile flow uses the Dart SDK (and closed a real Phase 9 gap - make flutter-test now passes). 39 unit tests total, all against real local HTTP servers, plus live validation against real Keycloak/core-api/realtime-gateway for all three.", "12b9046"),
     (28, "Done", "Observability Completion", "New packages/go/platformkit/metrics gives every service a real /metrics endpoint and all 8 named dashboards real backing data (Kafka lag excluded - no real producer/consumer exists yet, an honest placeholder panel instead). logging.NewWithLoki ships structured logs directly to Loki's push API with real trace_id correlation. Grafana provisioning (previously mounted nowhere) now auto-loads Prometheus/Tempo/Loki datasources and a real dashboard; alerts.yml adds 6 live-evaluated Prometheus alerting rules. A real regression (broken WebSocket Hijack) was caught by the metrics middleware's own tests before ever reaching a running service.", "697ea4c"),
-    (29, "Next up", "Platform Control Plane", "One view of applications/services/versions/environments/dependencies/deployments/DB ownership/events/API contracts/health/alerts/recent changes - every module discoverable from one place.", "-"),
-    (30, "Pending", "AI Development Context", "Machine-readable context for AI agents - every module carries README, ownership metadata, dependencies, API contract, event contracts, DB ownership, so an agent (like this one) can safely work on any part of the platform.", "-"),
+    (29, "Done", "Platform Control Plane", "New apps/admin/control-plane page - all 12 roadmap-named dimensions, real: applications/health (existing), real per-service versions (new config.Version - the actual git SHA, wired through health.Live/Health on all 3 services), real environment (from GET /v1/platform), the real dependency graph and DB ownership (docs/control/platform.json, a new machine-readable export from build_workbook.py's own data + catalog/system.yaml), real events (contracts/asyncapi), real live Prometheus alerts, a real git log for recent changes, and an honest Deployments placeholder (no CI/CD exists yet).", "f0d1cc3"),
+    (30, "Next up", "AI Development Context", "Machine-readable context for AI agents - every module carries README, ownership metadata, dependencies, API contract, event contracts, DB ownership, so an agent (like this one) can safely work on any part of the platform.", "-"),
 ]
 ws2 = add_sheet(
     "Roadmap",
@@ -184,7 +191,7 @@ for n, name in [
     (14, "Search Platform"), (15, "Background Jobs"), (16, "Workflows"), (17, "Feature Flags"),
     (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"), (21, "Trust & Safety"),
     (22, "Billing / Entitlements"), (23, "Analytics"), (24, "AI Gateway"), (25, "Admin Portal"),
-    (26, "Backstage"), (27, "SDKs"), (28, "Observability Completion"),
+    (26, "Backstage"), (27, "SDKs"), (28, "Observability Completion"), (29, "Platform Control Plane"),
 ]:
     done(n, f"Phase {n}: {name} implemented, unit-tested, live-validated, documented, committed")
 
@@ -285,9 +292,19 @@ done(28, "Observability: dashboard - background job failures", "job_failures_tot
 done(28, "Observability: alerting rules", "6 real, live-evaluated Prometheus rules (infra/observability/alerts.yml) - ServiceDown live-confirmed firing then clearing on the real service lifecycle")
 pending(28, "Observability: Alertmanager routing (Slack/PagerDuty/email)", "Deferred - no real notification-channel credentials in this environment, the same reasoning Stripe/AI vendor adapters have documented; Prometheus's own rule evaluation and API are real regardless")
 pending(28, "Observability: per-service (not shared) Grafana dashboards", "Deferred - one shared 'Core Platform Overview' dashboard covers all 3 services today, not 9 separate roadmap-named dashboards")
+done(29, "Control Plane: one view - applications/services", "New apps/admin/control-plane page, real GET /v1/apps + per-service health")
+done(29, "Control Plane: one view - versions", "New config.Version (real git SHA via `git rev-parse --short HEAD`, BUILD_VERSION override) wired through health.Live/Health on all 3 services")
+done(29, "Control Plane: one view - environments", "Read live from GET /v1/platform's environment field - one real entry, not a fabricated multi-env list")
+done(29, "Control Plane: one view - dependencies", "New docs/control/platform.json (build_workbook.py export) parses catalog/system.yaml's real dependsOn graph - 23 components")
+pending(29, "Control Plane: one view - deployments", "Honest placeholder - no CI/CD pipeline or deployment tracking exists in this environment; real per-service version is the closest honest signal today")
+done(29, "Control Plane: one view - DB ownership", "platform.json exports the same module/storage data docs/control's Modules sheet tracks - one source, not a third copy")
+done(29, "Control Plane: one view - events", "platform.json parses contracts/asyncapi/events.yaml's real channels")
+done(29, "Control Plane: one view - API contracts", "Links to the real OpenAPI/AsyncAPI files and the Backstage catalog (Phase 26)")
+done(29, "Control Plane: one view - health", "Reuses the existing real getSystemHealth() live /healthz calls")
+done(29, "Control Plane: one view - alerts", "New live fetch of Prometheus's real GET /api/v1/alerts (Phase 28's rules) - cross-checked live against a direct curl to the same endpoint")
+done(29, "Control Plane: one view - recent changes", "New real `git log` of the checkout, run server-side - not a hand-maintained changelog")
 
 for n, name, items in [
-    (29, "Platform Control Plane", ["one view: applications/services/versions", "one view: environments/dependencies/deployments", "one view: DB ownership/events/API contracts", "one view: health/alerts/recent changes"]),
     (30, "AI Development Context", ["every module: README", "every module: ownership metadata", "every module: dependencies", "every module: API contract", "every module: event contracts", "every module: DB ownership"]),
 ]:
     for item in items:
@@ -540,6 +557,7 @@ test_rows = [
     ("22", "Test the TypeScript SDK", "cd packages/typescript/core-sdk && npm install && npm test", "13 unit tests against a real node:http server. make sdk-ts-build must run before apps/admin can resolve @core-platform/sdk - make admin-install/admin-build already depend on it."),
     ("23", "Test the Dart SDK", "cd packages/flutter/core_sdk && dart pub get && dart test", "13 unit tests against a real dart:io HttpServer. apps/mobile depends on this package via a path: dependency in its pubspec.yaml."),
     ("24", "Look at real dashboards, metrics, logs, traces, and alerts", "Open http://localhost:3000 (admin/admin) -> Core Platform folder -> Core Platform Overview", "Needs core-api/realtime-gateway/worker actually running (steps 5-7). Every panel is real data (Phase 28) - API latency, error rate, requests/sec, DB connections, WebSocket connections, Redis latency, notification/job failures. Prometheus alerts: http://localhost:9090/alerts. Loki/Tempo: query via Grafana's Explore tab."),
+    ("25", "See the whole platform in one view", "Sign into the Admin Portal (step 19), then Overview -> Control Plane", "Phase 29 - applications, per-service health/real versions (git SHA), environment, the real dependency graph, database ownership, events, API contract links, live Prometheus alerts, and a real git log, all on one real page. Prometheus (step 24's stack) must be running for the Alerts section to show live data - it degrades to an honest empty list otherwise, not an error."),
 ]
 ws6 = add_sheet(
     "How To Test",
@@ -608,3 +626,58 @@ if n != 1:
 with open(HTML, "w", encoding="utf-8") as f:
     f.write(new_html)
 print(f"embedded {len(b64)} base64 chars into {HTML}")
+
+# ---------------------------------------------------------------------------
+# PLATFORM.JSON (Phase 29 - Platform Control Plane)
+# ---------------------------------------------------------------------------
+# A machine-readable export of this same script's own in-memory data -
+# apps/admin's /control-plane page reads this rather than a second,
+# hand-maintained copy of the roadmap/module/stats data above. Also
+# parses catalog/system.yaml (Phase 26's real Backstage catalog) for
+# the dependency graph and contracts/asyncapi/events.yaml for the real
+# event list, so "dependencies" and "events" on that page are sourced
+# from the same real files Backstage itself serves, not re-authored.
+catalog_docs = list(yaml.safe_load_all(open(os.path.join(HERE, "..", "..", "catalog", "system.yaml"))))
+platform_components = []
+for doc in catalog_docs:
+    if doc.get("kind") != "Component":
+        continue
+    spec = doc.get("spec", {})
+    platform_components.append({
+        "name": doc["metadata"]["name"],
+        "description": doc["metadata"].get("description", ""),
+        "type": spec.get("type", ""),
+        "dependsOn": [r.split(":", 1)[-1] for r in spec.get("dependsOn", [])],
+        "system": spec.get("system", ""),
+    })
+
+events_doc = yaml.safe_load(open(os.path.join(HERE, "..", "..", "contracts", "asyncapi", "events.yaml")))
+platform_events = [
+    {"name": name, "address": chan.get("address", "")}
+    for name, chan in (events_doc.get("channels") or {}).items()
+]
+
+platform_data = {
+    "generatedAt": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    "stats": [{"label": label, "value": value, "note": note} for label, value, note in stats],
+    "roadmap": [
+        {"phase": phase, "status": status, "name": name, "summary": summary, "commit": commit}
+        for phase, status, name, summary, commit in roadmap_rows
+    ],
+    "modules": [
+        {
+            "name": name, "service": service, "responsibility": responsibility,
+            "storage": storage, "accessModel": access_model, "introducedPhase": introduced,
+        }
+        for name, service, responsibility, storage, access_model, introduced in module_rows
+    ],
+    "components": platform_components,
+    "events": platform_events,
+    "endpointCount": len(endpoint_rows),
+}
+
+platform_json_path = os.path.join(HERE, "platform.json")
+with open(platform_json_path, "w", encoding="utf-8") as f:
+    json.dump(platform_data, f, indent=2)
+    f.write("\n")
+print(f"wrote {platform_json_path}")

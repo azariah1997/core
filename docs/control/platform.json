@@ -1,0 +1,783 @@
+{
+  "generatedAt": "2026-08-19T23:42:42.653746+00:00",
+  "stats": [
+    {
+      "label": "Phases complete",
+      "value": "29 / 30",
+      "note": "97%"
+    },
+    {
+      "label": "Backend services",
+      "value": "3",
+      "note": "core-api, realtime-gateway, worker"
+    },
+    {
+      "label": "Frontend apps",
+      "value": "1",
+      "note": "apps/admin (Next.js 15 App Router) - now includes /control-plane, Phase 29"
+    },
+    {
+      "label": "Developer portal",
+      "value": "1",
+      "note": "platform/backstage (real @backstage/create-app, 27-entity catalog)"
+    },
+    {
+      "label": "Client SDKs",
+      "value": "3",
+      "note": "Go, TypeScript, Dart - packages/go/coresdk, packages/typescript/core-sdk, packages/flutter/core_sdk"
+    },
+    {
+      "label": "Shared Go packages",
+      "value": "2",
+      "note": "packages/go/platformkit, packages/go/coresdk"
+    },
+    {
+      "label": "Domain modules (core-api)",
+      "value": "24",
+      "note": "one per completed backend phase"
+    },
+    {
+      "label": "Live HTTP endpoints",
+      "value": "147",
+      "note": "see 'API Endpoints' sheet"
+    },
+    {
+      "label": "DB migrations",
+      "value": "22",
+      "note": "data/migrations/0001-0022"
+    },
+    {
+      "label": "Real infra dependencies",
+      "value": "10",
+      "note": "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, Ollama, OTel/Prometheus/Grafana/Loki/Tempo"
+    },
+    {
+      "label": "Commits so far",
+      "value": "42",
+      "note": "see git log"
+    }
+  ],
+  "roadmap": [
+    {
+      "phase": 1,
+      "status": "Done",
+      "name": "Platform Foundation",
+      "summary": "config/logging/errors/health/correlation IDs/OTel/graceful shutdown - the shared platformkit every later phase builds on.",
+      "commit": "9b9a65a"
+    },
+    {
+      "phase": 2,
+      "status": "Done",
+      "name": "Application Registry",
+      "summary": "First real domain module: Application CRUD, cursor pagination, application.created/updated events.",
+      "commit": "65a937d"
+    },
+    {
+      "phase": 3,
+      "status": "Done",
+      "name": "Identity",
+      "summary": "Provider abstraction over Keycloak (JWT validation + Admin API), platform-owned IdentityID/UserID, identities linkage table.",
+      "commit": "987f0cf"
+    },
+    {
+      "phase": 4,
+      "status": "Done",
+      "name": "Users",
+      "summary": "Platform person/account, separate from Identity. Soft-delete lifecycle, auto-provision on first login.",
+      "commit": "3f0289e"
+    },
+    {
+      "phase": 5,
+      "status": "Done",
+      "name": "Devices / Sessions",
+      "summary": "Per-user device tracking, push-token storage, revoke/reactivate, raw tokens never exposed in responses.",
+      "commit": "0762cfa"
+    },
+    {
+      "phase": 6,
+      "status": "Done",
+      "name": "Authorization / Access",
+      "summary": "authz.Service.Can(subject, action, resource) - RBAC (Postgres) + fine-grained ReBAC (OpenFGA), the one entry point every module uses.",
+      "commit": "892db7b"
+    },
+    {
+      "phase": 7,
+      "status": "Done",
+      "name": "Tenants / Organizations",
+      "summary": "Tenant + Membership (owner/admin/member), scoped to an Application. Tenant-role checks answered from Membership data, not OpenFGA.",
+      "commit": "9040905"
+    },
+    {
+      "phase": 8,
+      "status": "Done",
+      "name": "Relationships / Social Graph",
+      "summary": "Generic RelationshipType/Relationship/Status graph: request/accept/decline/remove/block, no fixed 'friend/follower' semantics.",
+      "commit": "542604c"
+    },
+    {
+      "phase": 9,
+      "status": "Done",
+      "name": "Groups / Circles",
+      "summary": "Generic Group/GroupMember primitive (friend circles, teams, guilds - same shape), free-form product-defined member roles.",
+      "commit": "02b5767"
+    },
+    {
+      "phase": 10,
+      "status": "Done",
+      "name": "Realtime Platform",
+      "summary": "New realtime-gateway service: hand-rolled WebSocket (RFC6455), Redis-fanned pub/sub for cross-replica delivery, TTL-based presence.",
+      "commit": "1eda4b3"
+    },
+    {
+      "phase": 11,
+      "status": "Done",
+      "name": "Messaging",
+      "summary": "Conversation/Message/Delivery/ReadState/Reaction/Attachment, realtime delivery via a new shared rtbus package, durable storage in Postgres.",
+      "commit": "a199c4c"
+    },
+    {
+      "phase": 12,
+      "status": "Done",
+      "name": "Notification Platform",
+      "summary": "Notification/Template/Preference/Delivery across push/email/sms/in_app/realtime; only push is genuinely provider-tested locally (real device-token check).",
+      "commit": "95b8e05"
+    },
+    {
+      "phase": 13,
+      "status": "Done",
+      "name": "File / Media Platform",
+      "summary": "Presigned upload/download against real MinIO/S3, real MD5 checksum verification, ownership/permissions/retention/purge.",
+      "commit": "9a39606"
+    },
+    {
+      "phase": 14,
+      "status": "Done",
+      "name": "Search Platform",
+      "summary": "SearchDocument/SearchProvider over OpenSearch; event-driven indexing via a new worker service polling the outbox.",
+      "commit": "6a4eafd"
+    },
+    {
+      "phase": 15,
+      "status": "Done",
+      "name": "Background Jobs",
+      "summary": "Job/JobStatus/JobAttempt: immediate/scheduled/delayed/recurring/retry/dead-letter, executed by worker, never inline in HTTP handlers.",
+      "commit": "d9221a4"
+    },
+    {
+      "phase": 16,
+      "status": "Done",
+      "name": "Workflows",
+      "summary": "Temporal abstraction (Core Workflow API/SDK) for long-running, multi-step, compensating, scheduled processes - Temporal never exposed directly.",
+      "commit": "59dfe77"
+    },
+    {
+      "phase": 17,
+      "status": "Done",
+      "name": "Feature Flags",
+      "summary": "Feature/FeatureRule/FeatureEvaluation targeting app/env/user/tenant/platform/country/%/version, deterministic FNV-1a percentage bucketing.",
+      "commit": "86925a5"
+    },
+    {
+      "phase": 18,
+      "status": "Done",
+      "name": "Remote Configuration",
+      "summary": "Typed key/value store scoped by (AppID, Environment, Key), full change-audit trail, config.updated/deleted events.",
+      "commit": "9a0ad7b"
+    },
+    {
+      "phase": 19,
+      "status": "Done",
+      "name": "Audit",
+      "summary": "Central Audit Service: actor/action/resource/timestamp/correlation/app/tenant/device/metadata. Immutable by omission AND a DB trigger.",
+      "commit": "2629e91"
+    },
+    {
+      "phase": 20,
+      "status": "Done",
+      "name": "Privacy",
+      "summary": "Consent (append-only), preferences, retention policy, and cross-module ExportUserData/DeleteUserData via an Exporter/Deleter registry (users/devices/files/audit-export-only). Coordinated by a Temporal workflow core-api runs its own embedded worker for, since worker (separate module) can't reach core-api's internal packages.",
+      "commit": "44299b2"
+    },
+    {
+      "phase": 21,
+      "status": "Done",
+      "name": "Trust & Safety",
+      "summary": "Mute/Report->ModerationCase (deduplicated)/Suspension/Ban/Appeal - Block reuses Phase 8's relationships, not duplicated. A new requireActive middleware makes Suspension/Ban actually restrict access platform-wide from one place. New shared ratelimit package (Valkey-backed) gates report spam; a critical AbuseSignal auto-opens a case.",
+      "commit": "7af4c58"
+    },
+    {
+      "phase": 22,
+      "status": "Done",
+      "name": "Billing / Entitlements",
+      "summary": "Entitlement (platform truth, HasEntitlement) kept separate from Payment (provider transaction record). PaymentProvider abstraction + registry; billing/stripe implements Stripe's real webhook HMAC signature scheme, live-validated without a Stripe account via self-signed test payloads. Apple IAP/Google Play deliberately deferred - no sandbox credentials available.",
+      "commit": "8fcc87f"
+    },
+    {
+      "phase": 23,
+      "status": "Done",
+      "name": "Analytics",
+      "summary": "Generic event envelope, matching the roadmap's own field names verbatim. analytics_events is a landing buffer, never queried for analytics - a new worker pipeline batches unflushed rows as NDJSON into MinIO/S3 (a real data-lake landing pattern). Track is this platform's one open, unauthenticated write endpoint, IP-rate-limited instead of Bearer-gated.",
+      "commit": "aa207ae"
+    },
+    {
+      "phase": 24,
+      "status": "Done",
+      "name": "AI Gateway",
+      "summary": "Provider-neutral interface; real local inference via a new Ollama container (auto-pulled model, no vendor API key) - the one live-testable provider. Model routing, quotas (ratelimit reused again), real token/cost tracking, a genuine audit.Record per call, prompt/version metadata, timeouts, fallback. OpenAI/Anthropic/Google structurally supported, not implemented (no real credentials).",
+      "commit": "d7324b9"
+    },
+    {
+      "phase": 25,
+      "status": "Done",
+      "name": "Admin Portal",
+      "summary": "The control-plane UI (apps/admin, Next.js 15 App Router), always through service APIs, never direct DB queries - real Keycloak-authenticated session, live data on Users/Roles/Applications/Audit/Moderation/Feature Flags/Jobs/Configuration/System Health/Billing/AI Gateway, honest ComingSoon reasoning for every area whose backend endpoint is still self-scoped-only. Added authz's first HTTP surface and GET /v1/users (admin-wide listing) to close real gaps. Live-validated end to end with a real headless browser: login, dashboard, a full role grant/revoke round trip, logout.",
+      "commit": "97091a7"
+    },
+    {
+      "phase": 26,
+      "status": "Done",
+      "name": "Backstage",
+      "summary": "A real @backstage/create-app instance (platform/backstage) whose catalog (catalog/system.yaml) is 24 real entities - a Group, the System, Components for all 3 services + admin + 16 domain modules with real dependsOn/providesApis, and 2 API entities embedding the full real OpenAPI/AsyncAPI specs. Filled in 11 stub module READMEs, fixed 2 real YAML bugs in the OpenAPI spec, generated ~110 missing OpenAPI paths from the actual Go route registrations, and live-validated the whole catalog loads with zero processing errors via the real catalog API.",
+      "commit": "b1bf7b9"
+    },
+    {
+      "phase": 27,
+      "status": "Done",
+      "name": "SDKs",
+      "summary": "Go (packages/go/coresdk), TypeScript (packages/typescript/core-sdk), and Dart (packages/flutter/core_sdk) - auth/token refresh, typed API calls, errors, pagination, GET-only retries, a real realtime WebSocket client, device registration, in all three. Each proven by a real consumer: apps/admin migrated its entire API layer to the TS SDK; apps/mobile's login/profile flow uses the Dart SDK (and closed a real Phase 9 gap - make flutter-test now passes). 39 unit tests total, all against real local HTTP servers, plus live validation against real Keycloak/core-api/realtime-gateway for all three.",
+      "commit": "12b9046"
+    },
+    {
+      "phase": 28,
+      "status": "Done",
+      "name": "Observability Completion",
+      "summary": "New packages/go/platformkit/metrics gives every service a real /metrics endpoint and all 8 named dashboards real backing data (Kafka lag excluded - no real producer/consumer exists yet, an honest placeholder panel instead). logging.NewWithLoki ships structured logs directly to Loki's push API with real trace_id correlation. Grafana provisioning (previously mounted nowhere) now auto-loads Prometheus/Tempo/Loki datasources and a real dashboard; alerts.yml adds 6 live-evaluated Prometheus alerting rules. A real regression (broken WebSocket Hijack) was caught by the metrics middleware's own tests before ever reaching a running service.",
+      "commit": "697ea4c"
+    },
+    {
+      "phase": 29,
+      "status": "Done",
+      "name": "Platform Control Plane",
+      "summary": "New apps/admin/control-plane page - all 12 roadmap-named dimensions, real: applications/health (existing), real per-service versions (new config.Version - the actual git SHA, wired through health.Live/Health on all 3 services), real environment (from GET /v1/platform), the real dependency graph and DB ownership (docs/control/platform.json, a new machine-readable export from build_workbook.py's own data + catalog/system.yaml), real events (contracts/asyncapi), real live Prometheus alerts, a real git log for recent changes, and an honest Deployments placeholder (no CI/CD exists yet).",
+      "commit": "f0d1cc3"
+    },
+    {
+      "phase": 30,
+      "status": "Next up",
+      "name": "AI Development Context",
+      "summary": "Machine-readable context for AI agents - every module carries README, ownership metadata, dependencies, API contract, event contracts, DB ownership, so an agent (like this one) can safely work on any part of the platform.",
+      "commit": "-"
+    }
+  ],
+  "modules": [
+    {
+      "name": "applications",
+      "service": "core-api",
+      "responsibility": "Application CRUD, the platform's own top-level tenant-of-tenants concept",
+      "storage": "applications",
+      "accessModel": "Open (read) / unauthenticated create in this phase's scope",
+      "introducedPhase": "Phase 2"
+    },
+    {
+      "name": "identity",
+      "service": "core-api",
+      "responsibility": "Auth provider abstraction (Keycloak today), token validation, identity<->user linkage",
+      "storage": "identities",
+      "accessModel": "Bearer token required for /me",
+      "introducedPhase": "Phase 3"
+    },
+    {
+      "name": "users",
+      "service": "core-api",
+      "responsibility": "Platform person/account, profile, soft-delete lifecycle",
+      "storage": "users",
+      "accessModel": "Self, or self-or-platform.admin for cross-user GET",
+      "introducedPhase": "Phase 4"
+    },
+    {
+      "name": "devices",
+      "service": "core-api",
+      "responsibility": "Per-user device + push-token registry, revoke/reactivate",
+      "storage": "devices",
+      "accessModel": "Self only",
+      "introducedPhase": "Phase 5"
+    },
+    {
+      "name": "authz",
+      "service": "core-api",
+      "responsibility": "Can(subject, action, resource) - RBAC + OpenFGA ReBAC, the one authorization entry point",
+      "storage": "user_roles + OpenFGA store",
+      "accessModel": "Self-service (HasRole) / role changes are the caller's own privileged action",
+      "introducedPhase": "Phase 6"
+    },
+    {
+      "name": "tenants",
+      "service": "core-api",
+      "responsibility": "Tenant + Membership (owner/admin/member), scoped to an Application",
+      "storage": "tenants, tenant_memberships",
+      "accessModel": "Member-only reads, owner/admin-only writes",
+      "introducedPhase": "Phase 7"
+    },
+    {
+      "name": "relationships",
+      "service": "core-api",
+      "responsibility": "Generic relationship graph: request/accept/decline/remove/block",
+      "storage": "relationships",
+      "accessModel": "Participant-only",
+      "introducedPhase": "Phase 8"
+    },
+    {
+      "name": "groups",
+      "service": "core-api",
+      "responsibility": "Generic Group/GroupMember, free-form roles, IsManager structural bit",
+      "storage": "groups, group_members",
+      "accessModel": "Member-only reads, manager-only writes",
+      "introducedPhase": "Phase 9"
+    },
+    {
+      "name": "realtime-gateway (service)",
+      "service": "realtime-gateway",
+      "responsibility": "WebSocket connections, channels, presence, direct/broadcast delivery",
+      "storage": "none (Redis/Valkey only)",
+      "accessModel": "Bearer token required at handshake",
+      "introducedPhase": "Phase 10"
+    },
+    {
+      "name": "messaging",
+      "service": "core-api",
+      "responsibility": "Conversation/Message/Delivery/ReadState/Reaction/Attachment",
+      "storage": "conversations, conversation_members, messages, message_*",
+      "accessModel": "Conversation-member-only",
+      "introducedPhase": "Phase 11"
+    },
+    {
+      "name": "notifications",
+      "service": "core-api",
+      "responsibility": "Notification/Template/Preference/Delivery across 5 channels",
+      "storage": "notifications, notification_requests, notification_preferences",
+      "accessModel": "Self-or-platform.admin to send; templates are platform.admin-only",
+      "introducedPhase": "Phase 12"
+    },
+    {
+      "name": "files",
+      "service": "core-api",
+      "responsibility": "Presigned upload/download, ownership, retention, checksum",
+      "storage": "files",
+      "accessModel": "Owner-or-platform.admin, visibility-scoped downloads",
+      "introducedPhase": "Phase 13"
+    },
+    {
+      "name": "search",
+      "service": "core-api",
+      "responsibility": "SearchDocument/SearchProvider over OpenSearch",
+      "storage": "none (OpenSearch only)",
+      "accessModel": "Open query; admin-only manual index/delete",
+      "introducedPhase": "Phase 14"
+    },
+    {
+      "name": "worker: indexer",
+      "service": "worker",
+      "responsibility": "Event-driven OpenSearch indexer, polls outbox_events",
+      "storage": "reads outbox_events",
+      "accessModel": "n/a (background)",
+      "introducedPhase": "Phase 14"
+    },
+    {
+      "name": "jobs",
+      "service": "core-api",
+      "responsibility": "Job/JobStatus/JobAttempt - immediate/scheduled/delayed/recurring/retry/dead-letter",
+      "storage": "jobs, job_attempts",
+      "accessModel": "Owner-or-platform.admin",
+      "introducedPhase": "Phase 15"
+    },
+    {
+      "name": "worker: jobrunner",
+      "service": "worker",
+      "responsibility": "Claims and executes due jobs (Echo, Webhook handlers)",
+      "storage": "reads/writes jobs, job_attempts",
+      "accessModel": "n/a (background)",
+      "introducedPhase": "Phase 15"
+    },
+    {
+      "name": "workflows",
+      "service": "core-api",
+      "responsibility": "Core Workflow API/SDK over Temporal (Start/Describe/Signal only)",
+      "storage": "workflow_runs (ownership only - state lives in Temporal)",
+      "accessModel": "Owner-or-platform.admin",
+      "introducedPhase": "Phase 16"
+    },
+    {
+      "name": "worker: workflows",
+      "service": "worker",
+      "responsibility": "ApprovalWorkflow, PingWebhookWorkflow (Temporal worker)",
+      "storage": "none (Temporal-native state)",
+      "accessModel": "n/a (background)",
+      "introducedPhase": "Phase 16"
+    },
+    {
+      "name": "features",
+      "service": "core-api",
+      "responsibility": "Feature/FeatureRule/FeatureEvaluation, deterministic percentage rollout",
+      "storage": "features, feature_rules",
+      "accessModel": "Open evaluate; platform.admin-only manage",
+      "introducedPhase": "Phase 17"
+    },
+    {
+      "name": "remoteconfig",
+      "service": "core-api",
+      "responsibility": "Typed KV config store, full audit trail per change",
+      "storage": "config_entries, config_changes",
+      "accessModel": "Open read; platform.admin-only write/history",
+      "introducedPhase": "Phase 18"
+    },
+    {
+      "name": "audit",
+      "service": "core-api",
+      "responsibility": "Central, immutable audit trail (API-omission + DB trigger enforced)",
+      "storage": "audit_events",
+      "accessModel": "Open to record; platform.admin-only to read",
+      "introducedPhase": "Phase 19"
+    },
+    {
+      "name": "privacy",
+      "service": "core-api",
+      "responsibility": "Consent, preferences, retention policy, cross-module export/delete via a registry",
+      "storage": "privacy_consents, privacy_preferences, retention_policies, data_export_requests, data_deletion_requests",
+      "accessModel": "Self for own data; platform.admin for retention policies",
+      "introducedPhase": "Phase 20"
+    },
+    {
+      "name": "privacy: embedded Temporal worker",
+      "service": "core-api",
+      "responsibility": "Runs privacy's own export/deletion workflows in-process (task queue privacy-tasks)",
+      "storage": "none (Temporal-native state)",
+      "accessModel": "n/a (background, inside core-api's own process)",
+      "introducedPhase": "Phase 20"
+    },
+    {
+      "name": "trustsafety",
+      "service": "core-api",
+      "responsibility": "Mute/Report/ModerationCase/Suspension/Ban/Appeal/AbuseSignal - Block reuses Phase 8's relationships",
+      "storage": "mutes, moderation_cases, reports, suspensions, bans, appeals, abuse_signals",
+      "accessModel": "Self for own mutes/appeals; moderator-or-admin for case/suspension/ban management",
+      "introducedPhase": "Phase 21"
+    },
+    {
+      "name": "billing",
+      "service": "core-api",
+      "responsibility": "Entitlement (platform truth) kept separate from Payment (provider transaction record); PaymentProvider abstraction + registry",
+      "storage": "entitlements, payments",
+      "accessModel": "Self for own entitlements/payments; platform.admin for manual grants",
+      "introducedPhase": "Phase 22"
+    },
+    {
+      "name": "billing/stripe",
+      "service": "core-api",
+      "responsibility": "Real Stripe webhook HMAC-SHA256 signature verification - the one live-testable PaymentProvider this phase ships",
+      "storage": "none (stateless verification)",
+      "accessModel": "n/a (provider-signature-authenticated, not a Bearer route)",
+      "introducedPhase": "Phase 22"
+    },
+    {
+      "name": "analytics",
+      "service": "core-api",
+      "responsibility": "Generic event envelope ingestion; analytics_events is a landing buffer, never a query surface",
+      "storage": "analytics_events",
+      "accessModel": "Open (IP-rate-limited) to track; platform.admin-only debug listing",
+      "introducedPhase": "Phase 23"
+    },
+    {
+      "name": "worker: analyticspipeline",
+      "service": "worker",
+      "responsibility": "Claims unflushed events, batches as NDJSON, writes to MinIO/S3 - the ClickHouse/warehouse/data-lake landing pattern",
+      "storage": "reads/writes analytics_events; writes MinIO/S3",
+      "accessModel": "n/a (background)",
+      "introducedPhase": "Phase 23"
+    },
+    {
+      "name": "aigateway",
+      "service": "core-api",
+      "responsibility": "Provider-neutral completions API - model routing, quotas, cost tracking, audit, timeouts, fallback",
+      "storage": "ai_completions",
+      "accessModel": "Self for own usage; open (quota-limited) to complete",
+      "introducedPhase": "Phase 24"
+    },
+    {
+      "name": "aigateway/ollama",
+      "service": "core-api",
+      "responsibility": "Real local-inference Provider adapter - the one live-testable Provider this phase ships",
+      "storage": "none (stateless HTTP client to a real Ollama container)",
+      "accessModel": "n/a (internal provider adapter, not a route)",
+      "introducedPhase": "Phase 24"
+    }
+  ],
+  "components": [
+    {
+      "name": "core-api",
+      "description": "The main platform API - almost every domain module below is implemented inside this one Go service.",
+      "type": "service",
+      "dependsOn": [],
+      "system": "core-platform"
+    },
+    {
+      "name": "realtime-gateway",
+      "description": "Standalone WebSocket service - hand-rolled RFC6455 connections, channel subscriptions, and TTL-based presence, fanned out across replicas via Valkey pub/sub.",
+      "type": "service",
+      "dependsOn": [
+        "communication"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "worker",
+      "description": "Background execution service - job runner, OpenSearch indexer, analytics NDJSON pipeline, and a Temporal workflow worker. A separate Go module from core-api, so it can never import core-api's internal packages directly.",
+      "type": "service",
+      "dependsOn": [
+        "events-workflows",
+        "content",
+        "analytics"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "admin",
+      "description": "The Admin Portal (Phase 25) - a Next.js 15 App Router UI over core-api, real Keycloak-authenticated session, no direct database access.",
+      "type": "website",
+      "dependsOn": [],
+      "system": "core-platform"
+    },
+    {
+      "name": "identity",
+      "description": "Auth provider abstraction (Keycloak today), token validation, identity<->user linkage.",
+      "type": "domain-module",
+      "dependsOn": [],
+      "system": "core-platform"
+    },
+    {
+      "name": "users",
+      "description": "Platform person/account, profile, soft-delete lifecycle; also owns device/session registration and revocation.",
+      "type": "domain-module",
+      "dependsOn": [
+        "identity"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "access",
+      "description": "Can(subject, action, resource) - RBAC roles plus a fine-grained OpenFGA-backed ReBAC check, the one authorization entry point every other domain module uses.",
+      "type": "domain-module",
+      "dependsOn": [
+        "identity",
+        "users"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "social",
+      "description": "Generic relationship graph (request/accept/decline/remove/block) and generic Group/GroupMember primitive - the platform never hardcodes what a relationship or a group means.",
+      "type": "domain-module",
+      "dependsOn": [
+        "users",
+        "access"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "communication",
+      "description": "Conversations/messages/delivery/read-state/reactions (core-api) plus real-time fan-out over WebSocket (realtime-gateway) - two services, one capability boundary.",
+      "type": "domain-module",
+      "dependsOn": [
+        "users",
+        "access",
+        "social"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "notifications",
+      "description": "Notification/Template/Preference/Delivery across push/email/sms/in_app/realtime; only push is genuinely provider-tested against a real device-token check locally.",
+      "type": "domain-module",
+      "dependsOn": [
+        "users",
+        "configuration"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "content",
+      "description": "Presigned file upload/download against real MinIO/S3 (files), and search documents over real OpenSearch, indexed asynchronously by worker (search).",
+      "type": "domain-module",
+      "dependsOn": [
+        "users",
+        "access"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "commerce",
+      "description": "Entitlement (platform truth) kept separate from Payment (provider transaction record); Stripe adapter live-validated via real webhook HMAC signatures.",
+      "type": "domain-module",
+      "dependsOn": [
+        "users",
+        "access"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "events-workflows",
+      "description": "Background jobs (immediate/scheduled/delayed/recurring/retry/dead-letter, executed by worker) and Temporal-backed durable workflows.",
+      "type": "domain-module",
+      "dependsOn": [
+        "operations"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "configuration",
+      "description": "Feature flags with deterministic percentage rollout, and a typed remote-config key/value store with a full change-audit trail.",
+      "type": "domain-module",
+      "dependsOn": [
+        "platform"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "trust-safety",
+      "description": "Mute/Report->ModerationCase/Suspension/Ban/Appeal; a requireActive middleware makes an active Suspension/Ban actually restrict platform access from one place.",
+      "type": "domain-module",
+      "dependsOn": [
+        "users",
+        "access"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "privacy-compliance",
+      "description": "Central immutable audit trail (trigger-enforced), plus consent/preferences/retention and cross-module export/deletion via a registry, coordinated by an embedded Temporal worker.",
+      "type": "domain-module",
+      "dependsOn": [
+        "users"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "analytics",
+      "description": "Generic event envelope ingestion (this platform's one open, unauthenticated write endpoint) - a landing buffer only, batched to MinIO/S3 as NDJSON by worker, never queried in place.",
+      "type": "domain-module",
+      "dependsOn": [
+        "events-workflows"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "ai",
+      "description": "Provider-neutral completions API - \"products must not call AI vendors directly\" is enforced structurally. Real local inference via Ollama; OpenAI/Anthropic/Google structurally supported, not implemented.",
+      "type": "domain-module",
+      "dependsOn": [
+        "access",
+        "events-workflows"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "operations",
+      "description": "platformkit (config, logging, errors, health, correlation IDs, OTel, graceful shutdown) - the shared foundation every Go service imports. No dependencies of its own.",
+      "type": "domain-module",
+      "dependsOn": [],
+      "system": "core-platform"
+    },
+    {
+      "name": "platform",
+      "description": "The Application Registry (which applications exist) and multi-tenancy (Tenant/Membership scoped to an Application).",
+      "type": "domain-module",
+      "dependsOn": [
+        "operations"
+      ],
+      "system": "core-platform"
+    },
+    {
+      "name": "coresdk-go",
+      "description": "Go SDK - auth/token refresh, typed API calls, errors, pagination, GET-only retries, a realtime WebSocket client, device registration.",
+      "type": "library",
+      "dependsOn": [],
+      "system": "core-platform"
+    },
+    {
+      "name": "coresdk-typescript",
+      "description": "TypeScript SDK - isomorphic (fetch/WebSocket/crypto.randomUUID). apps/admin's real API layer, not a parallel unused artifact.",
+      "type": "library",
+      "dependsOn": [],
+      "system": "core-platform"
+    },
+    {
+      "name": "coresdk-dart",
+      "description": "Dart SDK (a pure Dart package, no Flutter dependency) - apps/mobile's real login/profile flow depends on it.",
+      "type": "library",
+      "dependsOn": [],
+      "system": "core-platform"
+    }
+  ],
+  "events": [
+    {
+      "name": "userCreated",
+      "address": "user.created.v1"
+    },
+    {
+      "name": "userUpdated",
+      "address": "user.updated.v1"
+    },
+    {
+      "name": "userDeactivated",
+      "address": "user.deactivated.v1"
+    },
+    {
+      "name": "userDeleted",
+      "address": "user.deleted.v1"
+    },
+    {
+      "name": "applicationCreated",
+      "address": "application.created.v1"
+    },
+    {
+      "name": "applicationUpdated",
+      "address": "application.updated.v1"
+    },
+    {
+      "name": "relationshipCreated",
+      "address": "relationship.created.v1"
+    },
+    {
+      "name": "messageSent",
+      "address": "message.sent.v1"
+    },
+    {
+      "name": "notificationRequested",
+      "address": "notification.requested.v1"
+    },
+    {
+      "name": "notificationSent",
+      "address": "notification.sent.v1"
+    },
+    {
+      "name": "notificationDelivered",
+      "address": "notification.delivered.v1"
+    },
+    {
+      "name": "notificationFailed",
+      "address": "notification.failed.v1"
+    },
+    {
+      "name": "fileUploaded",
+      "address": "file.uploaded.v1"
+    },
+    {
+      "name": "configUpdated",
+      "address": "config.updated.v1"
+    },
+    {
+      "name": "configDeleted",
+      "address": "config.deleted.v1"
+    }
+  ],
+  "endpointCount": 147
+}
