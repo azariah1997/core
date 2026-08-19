@@ -72,15 +72,16 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "25 / 30", "83%"),
+    ("Phases complete", "26 / 30", "87%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
     ("Frontend apps", "1", "apps/admin (Next.js 15 App Router)"),
+    ("Developer portal", "1", "platform/backstage (real @backstage/create-app, 24-entity catalog)"),
     ("Shared Go packages", "1", "packages/go/platformkit"),
     ("Domain modules (core-api)", "24", "one per completed backend phase"),
     ("Live HTTP endpoints", "146", "see 'API Endpoints' sheet"),
     ("DB migrations", "22", "data/migrations/0001-0022"),
     ("Real infra dependencies", "10", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, Ollama, OTel"),
-    ("Commits so far", "34", "see git log"),
+    ("Commits so far", "36", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -140,8 +141,8 @@ roadmap_rows = [
     (23, "Done", "Analytics", "Generic event envelope, matching the roadmap's own field names verbatim. analytics_events is a landing buffer, never queried for analytics - a new worker pipeline batches unflushed rows as NDJSON into MinIO/S3 (a real data-lake landing pattern). Track is this platform's one open, unauthenticated write endpoint, IP-rate-limited instead of Bearer-gated.", "aa207ae"),
     (24, "Done", "AI Gateway", "Provider-neutral interface; real local inference via a new Ollama container (auto-pulled model, no vendor API key) - the one live-testable provider. Model routing, quotas (ratelimit reused again), real token/cost tracking, a genuine audit.Record per call, prompt/version metadata, timeouts, fallback. OpenAI/Anthropic/Google structurally supported, not implemented (no real credentials).", "d7324b9"),
     (25, "Done", "Admin Portal", "The control-plane UI (apps/admin, Next.js 15 App Router), always through service APIs, never direct DB queries - real Keycloak-authenticated session, live data on Users/Roles/Applications/Audit/Moderation/Feature Flags/Jobs/Configuration/System Health/Billing/AI Gateway, honest ComingSoon reasoning for every area whose backend endpoint is still self-scoped-only. Added authz's first HTTP surface and GET /v1/users (admin-wide listing) to close real gaps. Live-validated end to end with a real headless browser: login, dashboard, a full role grant/revoke round trip, logout.", "97091a7"),
-    (26, "Next up", "Backstage", "Integrate Backstage as the developer portal - every service/module exposes metadata (owner, lifecycle, repo, docs, dependencies, APIs, events, DB ownership, dashboards, runbooks). Backstage becomes the map of the platform.", "-"),
-    (27, "Pending", "SDKs", "Flutter SDK, TypeScript SDK, Go SDK - auth, token refresh, API calls, errors, pagination, safe retries, realtime connection, correlation IDs, device registration. Future products talk to Core primarily through these.", "-"),
+    (26, "Done", "Backstage", "A real @backstage/create-app instance (platform/backstage) whose catalog (catalog/system.yaml) is 24 real entities - a Group, the System, Components for all 3 services + admin + 16 domain modules with real dependsOn/providesApis, and 2 API entities embedding the full real OpenAPI/AsyncAPI specs. Filled in 11 stub module READMEs, fixed 2 real YAML bugs in the OpenAPI spec, generated ~110 missing OpenAPI paths from the actual Go route registrations, and live-validated the whole catalog loads with zero processing errors via the real catalog API.", "b1bf7b9"),
+    (27, "Next up", "SDKs", "Flutter SDK, TypeScript SDK, Go SDK - auth, token refresh, API calls, errors, pagination, safe retries, realtime connection, correlation IDs, device registration. Future products talk to Core primarily through these.", "-"),
     (28, "Pending", "Observability Completion", "Every production component gets structured logs, metrics, traces, health checks, dashboards, alerts. Standard dashboards for API latency, error rate, req/sec, DB connections, Kafka lag, WS connections, Redis latency, notification/job failures.", "-"),
     (29, "Pending", "Platform Control Plane", "One view of applications/services/versions/environments/dependencies/deployments/DB ownership/events/API contracts/health/alerts/recent changes - every module discoverable from one place.", "-"),
     (30, "Pending", "AI Development Context", "Machine-readable context for AI agents - every module carries README, ownership metadata, dependencies, API contract, event contracts, DB ownership, so an agent (like this one) can safely work on any part of the platform.", "-"),
@@ -182,6 +183,7 @@ for n, name in [
     (14, "Search Platform"), (15, "Background Jobs"), (16, "Workflows"), (17, "Feature Flags"),
     (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"), (21, "Trust & Safety"),
     (22, "Billing / Entitlements"), (23, "Analytics"), (24, "AI Gateway"), (25, "Admin Portal"),
+    (26, "Backstage"),
 ]:
     done(n, f"Phase {n}: {name} implemented, unit-tested, live-validated, documented, committed")
 
@@ -247,9 +249,17 @@ done(25, "Admin Portal: visibility - System Health", "Live GET /healthz against 
 done(25, "Admin Portal: visibility - Billing, AI Gateway usage (bonus, not roadmap-named)")
 pending(25, "Admin Portal: visibility - Sessions/Devices, Tenants, Relationships, Messages, Notifications, Files", "Deferred - each backing module only exposes a listMine-style self-scoped endpoint, not an admin-wide one; honest ComingSoon reasoning shown per area instead of fake rows")
 pending(25, "Admin Portal: visibility - Deployments", "Deferred to Phase 29 - nothing in the platform tracks deployments as data yet")
+done(26, "Backstage: integrate Backstage as developer portal", "Real @backstage/create-app instance at platform/backstage, catalog wired to real catalog/*.yaml + contracts/*/catalog-info.yaml, live-validated via the real catalog API (21 Components, 2 APIs, 1 System, 1 Group, 0 processing errors)")
+done(26, "Backstage: per-module metadata - name/description/owner/lifecycle", "All 16 modules/*/module.yaml + README.md real (11 were still stub text before this phase)")
+done(26, "Backstage: per-module metadata - repository/documentation", "Every Component links its module README; the System entity links VALIDATION.md and the new docs/RUNBOOKS.md")
+done(26, "Backstage: per-module metadata - dependencies", "Component dependsOn mirrors modules/*/module.yaml's real dependency graph; Backstage computes reverse dependencyOf relations automatically, confirmed live")
+done(26, "Backstage: per-module metadata - APIs", "2 API entities (OpenAPI, AsyncAPI), both with their full real spec embedded and live-loaded")
+done(26, "Backstage: per-module metadata - events", "providesApis set only on the components whose code actually calls outbox.Record, cross-checked against the real Go source")
+pending(26, "Backstage: per-module metadata - database ownership", "Deferred - no per-module DB-ownership annotation convention chosen yet; docs/control's Modules sheet tracks this today at a finer grain than catalog/system.yaml's 16 domains")
+done(26, "Backstage: per-module metadata - dashboards", "core-platform.io/dashboard annotation on each service pointing at the real local Grafana instance - no per-service dashboard exists yet (that's Phase 28), so it points at the shared instance, documented as such")
+done(26, "Backstage: per-module metadata - runbooks", "New docs/RUNBOOKS.md, linked from the System entity")
 
 for n, name, items in [
-    (26, "Backstage", ["integrate Backstage as developer portal", "per-module metadata: name/description/owner/lifecycle", "per-module metadata: repository/documentation/dependencies", "per-module metadata: APIs/events/DB ownership/dashboards/runbooks"]),
     (27, "SDKs", ["Flutter SDK", "TypeScript SDK", "Go SDK", "auth + token refresh in each SDK", "pagination + safe retries", "realtime connection helper", "correlation ID propagation", "device registration helper"]),
     (28, "Observability Completion", ["structured logs everywhere", "metrics everywhere", "distributed traces everywhere", "health checks everywhere", "dashboard: API latency", "dashboard: error rate", "dashboard: requests/sec", "dashboard: DB connections", "dashboard: Kafka lag", "dashboard: WebSocket connections", "dashboard: Redis latency", "dashboard: notification failures", "dashboard: background job failures", "alerting rules"]),
     (29, "Platform Control Plane", ["one view: applications/services/versions", "one view: environments/dependencies/deployments", "one view: DB ownership/events/API contracts", "one view: health/alerts/recent changes"]),
@@ -499,6 +509,7 @@ test_rows = [
     ("17", "Run the smoke test", "make smoke", "A scripted end-to-end pass (scripts/smoke.sh) against the real running services - the fastest single command to confirm the whole stack still works after a change."),
     ("18", "Skip the curl entirely", "Open this dashboard's API Console tab", "Pick an endpoint, fetch a token via the built-in Keycloak password-grant form (or paste one you already have), and send the request - the real response comes back right in the page. core-api's CORS middleware (internal/api/cors.go) is what makes this possible; it must be running a build from Phase 21 or later."),
     ("19", "Run the actual Admin Portal", "cd apps/admin && npm install && npm run dev", "Then open http://localhost:3000 and sign in with demo/demo. Real UI over real data (Phase 25) - Users, Roles, Audit, Moderation, Feature Flags, Jobs, Configuration, System Health, Billing, AI Gateway. Needs core-api (and ideally realtime-gateway/worker) already running per steps 5-7."),
+    ("20", "Browse the real developer-portal catalog", "cd platform/backstage && yarn install && yarn start", "Needs Node 20/22 and a real Yarn install - see platform/backstage/README.md if the versions on $PATH don't satisfy Backstage's own prerequisite check. Then open http://localhost:3000 (stop the Admin Portal first, they share a port) and browse the Catalog - every module/service/app is a real entity (Phase 26), not example fixture data."),
 ]
 ws6 = add_sheet(
     "How To Test",
@@ -514,6 +525,7 @@ ws6 = add_sheet(
 infra_rows = [
     ("core-api", "Go service", "http://localhost:8080", "The main platform API - almost every module in this workbook lives here.", "n/a"),
     ("admin (apps/admin)", "Next.js app", "http://localhost:3000", "The Admin Portal (Phase 25) - real UI over core-api, session-based auth via Keycloak.", "sign in with demo/demo (same as core realm)"),
+    ("backstage (platform/backstage)", "Backstage app", "http://localhost:3000 (frontend), :7007 (backend)", "The developer portal (Phase 26) - real catalog of every module/service/app. Shares apps/admin's default frontend port 3000, so only run one of the two at a time locally unless one's app-config.yaml is repointed at a different port.", "guest auth only, no credentials"),
     ("realtime-gateway", "Go service", "ws://localhost:8090", "WebSocket connections, presence, channel fan-out.", "n/a"),
     ("worker", "Go service", "http://localhost:8091 (health only)", "Background job runner, search indexer, Temporal workflow worker, analytics NDJSON pipeline.", "n/a"),
     ("Postgres", "Docker container", "localhost:5432", "System of record for every domain module.", "core / core, db 'core'"),
