@@ -16,6 +16,9 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/authz"
 	"github.com/example/core-platform/backend/core-api/internal/authz/openfga"
 	authzpg "github.com/example/core-platform/backend/core-api/internal/authz/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/billing"
+	billingpg "github.com/example/core-platform/backend/core-api/internal/billing/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/billing/stripe"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicespg "github.com/example/core-platform/backend/core-api/internal/devices/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/features"
@@ -216,7 +219,15 @@ func main() {
 	// notifications already use - no new infra connection needed.
 	trustSafetySvc := trustsafety.NewService(trustsafetypg.New(pool), authzSvc, ratelimit.New(redisClient))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc, trustSafetySvc))
+	// Phase 22: stripe.Provider is the one PaymentProvider this phase
+	// ships as genuinely live-testable (real HMAC-SHA256 webhook
+	// signature verification, no live Stripe account needed) - see
+	// internal/billing/README.md for why Apple IAP/Google Play are
+	// deliberately not registered here.
+	billingSvc := billing.NewService(billingpg.New(pool), authzSvc)
+	billingSvc.RegisterProvider(stripe.New(stripe.Config{WebhookSecret: cfg.StripeWebhookSecret}))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc, trustSafetySvc, billingSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

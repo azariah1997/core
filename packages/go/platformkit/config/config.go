@@ -34,6 +34,12 @@ type Config struct {
 
 	JWTIssuer   string
 	JWTAudience string
+
+	// StripeWebhookSecret verifies billing/stripe's real HMAC signature
+	// checking - see internal/billing/README.md for how the local
+	// default below was used to live-validate that verification without
+	// a real Stripe account.
+	StripeWebhookSecret string
 }
 
 func Load() Config {
@@ -65,6 +71,8 @@ func Load() Config {
 
 		JWTIssuer:   env("JWT_ISSUER", "http://localhost:8081/realms/core"),
 		JWTAudience: env("JWT_AUDIENCE", "core-platform"),
+
+		StripeWebhookSecret: env("STRIPE_WEBHOOK_SECRET", "whsec_local_dev_only_do_not_use_in_production"),
 	}
 }
 
@@ -87,6 +95,7 @@ func (c Config) Validate() error {
 	check("KEYCLOAK_ADMIN_PASSWORD", c.KeycloakAdminPassword, "admin")
 	check("JWT_ISSUER", c.JWTIssuer, "http://localhost:8081/realms/core")
 	check("S3_SECRET_KEY", c.S3SecretKey, "minio123")
+	check("STRIPE_WEBHOOK_SECRET", c.StripeWebhookSecret, "whsec_local_dev_only_do_not_use_in_production")
 	if len(c.KafkaBrokers) == 0 || c.KafkaBrokers[0] == "localhost:9092" {
 		insecure = append(insecure, "KAFKA_BROKERS")
 	}

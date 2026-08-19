@@ -27,6 +27,7 @@ func TestValidatePassesWhenProductionConfigOverridden(t *testing.T) {
 	c.KeycloakAdminPassword = "real-admin-secret"
 	c.JWTIssuer = "https://auth.example.com/realms/core"
 	c.S3SecretKey = "real-secret"
+	c.StripeWebhookSecret = "whsec_real_production_secret"
 	c.KafkaBrokers = []string{"prod-kafka:9092"}
 	if err := c.Validate(); err != nil {
 		t.Fatalf("expected overridden production config to pass, got %v", err)

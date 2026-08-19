@@ -16,6 +16,8 @@ import (
 	auditmemory "github.com/example/core-platform/backend/core-api/internal/audit/memory"
 	"github.com/example/core-platform/backend/core-api/internal/authz"
 	authzmemory "github.com/example/core-platform/backend/core-api/internal/authz/memory"
+	"github.com/example/core-platform/backend/core-api/internal/billing"
+	billingmemory "github.com/example/core-platform/backend/core-api/internal/billing/memory"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
 	devicesmemory "github.com/example/core-platform/backend/core-api/internal/devices/memory"
 	"github.com/example/core-platform/backend/core-api/internal/features"
@@ -156,6 +158,7 @@ func newTestHandler() http.Handler {
 	// authzSvc already satisfies trustsafety.ModeratorChecker directly
 	// (IsPlatformAdmin plus IsModerator).
 	trustSafetySvc := trustsafety.NewService(trustsafetymemory.New(), authzSvc, noopRateLimiter{})
+	billingSvc := billing.NewService(billingmemory.New(), authzSvc)
 
 	return New(
 		config.Load(),
@@ -178,6 +181,7 @@ func newTestHandler() http.Handler {
 		auditSvc,
 		privacySvc,
 		trustSafetySvc,
+		billingSvc,
 	)
 }
 
@@ -406,6 +410,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 	roleChangeAuditRecorder.SetAuditService(auditSvc)
 	privacySvc := privacy.NewService(privacymemory.New(), authzSvc, noopTemporalClient{}, noopObjectStore{})
 	trustSafetySvc := trustsafety.NewService(trustsafetymemory.New(), authzSvc, noopRateLimiter{})
+	billingSvc := billing.NewService(billingmemory.New(), authzSvc)
 	handler := New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
@@ -427,6 +432,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		auditSvc,
 		privacySvc,
 		trustSafetySvc,
+		billingSvc,
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")
