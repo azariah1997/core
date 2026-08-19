@@ -18,5 +18,9 @@ terraform.tfvars
 .dart_tool/
 .flutter-plugins*
 .pub-cache/
+# Dart/Flutter convention: commit pubspec.lock for apps (apps/mobile),
+# not for packages meant to be consumed by others.
+packages/flutter/*/pubspec.lock
+packages/dart/*/pubspec.lock
 Pods/
 DerivedData/

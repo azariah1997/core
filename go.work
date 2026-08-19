@@ -5,4 +5,5 @@ use (
 	./backend/realtime-gateway
 	./backend/worker
 	./packages/go/platformkit
+	./packages/go/coresdk
 )

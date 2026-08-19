@@ -365,6 +365,59 @@ spec:
   providesApis: [core-platform-events]
 
 # ---------------------------------------------------------------------
+# SDKs (Phase 27) - "future products should primarily interact with
+# Core through these," per the roadmap. Each consumes core-api's real
+# HTTP surface; real-world consumption is proven by apps/admin (the
+# TypeScript SDK) and apps/mobile (the Dart SDK) actually depending on
+# them, not just existing alongside unused code.
+# ---------------------------------------------------------------------
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: coresdk-go
+  description: Go SDK - auth/token refresh, typed API calls, errors, pagination, GET-only retries, a realtime WebSocket client, device registration.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/packages/go/coresdk/README.md
+      title: Package README
+spec:
+  type: library
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  consumesApis: [core-api]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: coresdk-typescript
+  description: TypeScript SDK - isomorphic (fetch/WebSocket/crypto.randomUUID). apps/admin's real API layer, not a parallel unused artifact.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/packages/typescript/core-sdk/README.md
+      title: Package README
+spec:
+  type: library
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  consumesApis: [core-api]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: coresdk-dart
+  description: Dart SDK (a pure Dart package, no Flutter dependency) - apps/mobile's real login/profile flow depends on it.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/packages/flutter/core_sdk/README.md
+      title: Package README
+spec:
+  type: library
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  consumesApis: [core-api]
+
+# ---------------------------------------------------------------------
 # APIs (core-api and core-platform-events) are defined in
 # contracts/openapi/catalog-info.yaml and contracts/asyncapi/catalog-info.yaml,
 # colocated with their spec files rather than declared here - Backstage's

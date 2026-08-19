@@ -8,6 +8,8 @@ dependencies:
     sdk: flutter
   http: ^1.2.0
   web_socket_channel: ^3.0.0
+  core_sdk:
+    path: ../../packages/flutter/core_sdk
 dev_dependencies:
   flutter_test:
     sdk: flutter

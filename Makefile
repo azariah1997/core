@@ -1,4 +1,4 @@
-.PHONY: doctor fmt test build run-api run-realtime run-worker local-up local-down local-logs smoke validate-config validate-contracts validate-all admin-install admin-build flutter-get flutter-test terraform-fmt terraform-validate helm-lint
+.PHONY: doctor fmt test build run-api run-realtime run-worker local-up local-down local-logs smoke validate-config validate-contracts validate-all admin-install admin-build sdk-ts-install sdk-ts-build sdk-ts-test flutter-get flutter-test terraform-fmt terraform-validate helm-lint
 
 doctor:
 	@./scripts/doctor.sh
@@ -7,10 +7,10 @@ fmt:
 	gofmt -w backend packages/go
 
 build:
-	go build ./backend/core-api/... ./backend/realtime-gateway/... ./backend/worker/... ./packages/go/platformkit/...
+	go build ./backend/core-api/... ./backend/realtime-gateway/... ./backend/worker/... ./packages/go/platformkit/... ./packages/go/coresdk/...
 
 test:
-	go test ./backend/core-api/... ./backend/realtime-gateway/... ./backend/worker/... ./packages/go/platformkit/...
+	go test ./backend/core-api/... ./backend/realtime-gateway/... ./backend/worker/... ./packages/go/platformkit/... ./packages/go/coresdk/...
 
 run-api:
 	go run ./backend/core-api/cmd/server
@@ -41,10 +41,22 @@ validate-contracts:
 
 validate-all: validate-config validate-contracts test build
 
-admin-install:
+sdk-ts-install:
+	cd packages/typescript/core-sdk && npm install
+
+sdk-ts-build: sdk-ts-install
+	cd packages/typescript/core-sdk && npm run build
+
+sdk-ts-test: sdk-ts-install
+	cd packages/typescript/core-sdk && npm test
+
+# apps/admin depends on @core-platform/sdk via a local file: reference
+# (package.json), which npm resolves to the real package directory but
+# does not build - dist/ must already exist, so the SDK is built first.
+admin-install: sdk-ts-build
 	cd apps/admin && npm install
 
-admin-build:
+admin-build: sdk-ts-build
 	cd apps/admin && npm run build
 
 flutter-get:
