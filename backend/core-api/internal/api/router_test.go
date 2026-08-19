@@ -12,6 +12,8 @@ import (
 
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationsmemory "github.com/example/core-platform/backend/core-api/internal/applications/memory"
+	"github.com/example/core-platform/backend/core-api/internal/audit"
+	auditmemory "github.com/example/core-platform/backend/core-api/internal/audit/memory"
 	"github.com/example/core-platform/backend/core-api/internal/authz"
 	authzmemory "github.com/example/core-platform/backend/core-api/internal/authz/memory"
 	"github.com/example/core-platform/backend/core-api/internal/devices"
@@ -102,7 +104,13 @@ func (noopTemporalClient) Signal(ctx context.Context, workflowID, runID, signalN
 }
 
 func newTestHandler() http.Handler {
-	authzSvc := authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider())
+	// Same two-phase wiring cmd/server/main.go uses to break the
+	// authz<->audit construction cycle - see audit_adapter.go's doc
+	// comment.
+	roleChangeAuditRecorder := NewRoleChangeAuditRecorder()
+	authzSvc := authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider(), roleChangeAuditRecorder, slog.Default())
+	auditSvc := audit.NewService(auditmemory.New(), authzSvc)
+	roleChangeAuditRecorder.SetAuditService(auditSvc)
 	return New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
@@ -121,6 +129,7 @@ func newTestHandler() http.Handler {
 		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
 		features.NewService(featuresmemory.New(), authzSvc),
 		remoteconfig.NewService(remoteconfigmemory.New(), authzSvc),
+		auditSvc,
 	)
 }
 
@@ -343,7 +352,10 @@ func TestGetUserByIDDeniesCrossUserAccessWithoutRole(t *testing.T) {
 // grant access no plain authenticated caller has.
 func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 	roles := authzmemory.NewRoleRepository()
-	authzSvc := authz.NewService(roles, authzmemory.NewProvider())
+	roleChangeAuditRecorder := NewRoleChangeAuditRecorder()
+	authzSvc := authz.NewService(roles, authzmemory.NewProvider(), roleChangeAuditRecorder, slog.Default())
+	auditSvc := audit.NewService(auditmemory.New(), authzSvc)
+	roleChangeAuditRecorder.SetAuditService(auditSvc)
 	handler := New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
@@ -362,12 +374,13 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
 		features.NewService(featuresmemory.New(), authzSvc),
 		remoteconfig.NewService(remoteconfigmemory.New(), authzSvc),
+		auditSvc,
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")
 	adminID := provisionUser(t, handler, "admin-user")
 
-	if err := authzSvc.AssignRole(context.Background(), adminID, authz.RolePlatformAdmin); err != nil {
+	if err := authzSvc.AssignRole(context.Background(), adminID, adminID, authz.RolePlatformAdmin); err != nil {
 		t.Fatalf("assign role: %v", err)
 	}
 

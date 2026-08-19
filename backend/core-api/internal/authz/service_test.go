@@ -2,14 +2,24 @@ package authz_test
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/example/core-platform/backend/core-api/internal/authz"
 	"github.com/example/core-platform/backend/core-api/internal/authz/memory"
 )
 
+// fakeAuditRecorder discards audit events - these tests exercise role
+// assignment/revocation semantics, not audit recording (that's audit's
+// own package tests).
+type fakeAuditRecorder struct{}
+
+func (fakeAuditRecorder) RecordRoleChange(ctx context.Context, actorUserID, action, targetUserID, role string) error {
+	return nil
+}
+
 func newService() *authz.Service {
-	return authz.NewService(memory.NewRoleRepository(), memory.NewProvider())
+	return authz.NewService(memory.NewRoleRepository(), memory.NewProvider(), fakeAuditRecorder{}, slog.Default())
 }
 
 func TestHasRoleFalseBeforeAssignment(t *testing.T) {
@@ -26,7 +36,7 @@ func TestHasRoleFalseBeforeAssignment(t *testing.T) {
 func TestAssignRoleThenHasRole(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
-	if err := svc.AssignRole(ctx, "user-1", authz.RoleSupport); err != nil {
+	if err := svc.AssignRole(ctx, "user-1", "user-1", authz.RoleSupport); err != nil {
 		t.Fatalf("assign role: %v", err)
 	}
 	has, err := svc.HasRole(ctx, "user-1", authz.RoleSupport)
@@ -41,10 +51,10 @@ func TestAssignRoleThenHasRole(t *testing.T) {
 func TestRevokeRoleRemovesIt(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
-	if err := svc.AssignRole(ctx, "user-1", authz.RoleModerator); err != nil {
+	if err := svc.AssignRole(ctx, "user-1", "user-1", authz.RoleModerator); err != nil {
 		t.Fatalf("assign role: %v", err)
 	}
-	if err := svc.RevokeRole(ctx, "user-1", authz.RoleModerator); err != nil {
+	if err := svc.RevokeRole(ctx, "user-1", "user-1", authz.RoleModerator); err != nil {
 		t.Fatalf("revoke role: %v", err)
 	}
 	has, err := svc.HasRole(ctx, "user-1", authz.RoleModerator)
@@ -59,7 +69,7 @@ func TestRevokeRoleRemovesIt(t *testing.T) {
 func TestAssigningPlatformAdminGrantsFineGrainedAccess(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
-	if err := svc.AssignRole(ctx, "user-1", authz.RolePlatformAdmin); err != nil {
+	if err := svc.AssignRole(ctx, "user-1", "user-1", authz.RolePlatformAdmin); err != nil {
 		t.Fatalf("assign role: %v", err)
 	}
 	isAdmin, err := svc.IsPlatformAdmin(ctx, "user-1")
@@ -74,10 +84,10 @@ func TestAssigningPlatformAdminGrantsFineGrainedAccess(t *testing.T) {
 func TestRevokingPlatformAdminRemovesFineGrainedAccess(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
-	if err := svc.AssignRole(ctx, "user-1", authz.RolePlatformAdmin); err != nil {
+	if err := svc.AssignRole(ctx, "user-1", "user-1", authz.RolePlatformAdmin); err != nil {
 		t.Fatalf("assign role: %v", err)
 	}
-	if err := svc.RevokeRole(ctx, "user-1", authz.RolePlatformAdmin); err != nil {
+	if err := svc.RevokeRole(ctx, "user-1", "user-1", authz.RolePlatformAdmin); err != nil {
 		t.Fatalf("revoke role: %v", err)
 	}
 	isAdmin, err := svc.IsPlatformAdmin(ctx, "user-1")
@@ -103,7 +113,7 @@ func TestCanIsFalseByDefault(t *testing.T) {
 func TestOtherUsersRolesAreUnaffected(t *testing.T) {
 	svc := newService()
 	ctx := context.Background()
-	if err := svc.AssignRole(ctx, "user-1", authz.RolePlatformAdmin); err != nil {
+	if err := svc.AssignRole(ctx, "user-1", "user-1", authz.RolePlatformAdmin); err != nil {
 		t.Fatalf("assign role: %v", err)
 	}
 	isAdmin, err := svc.IsPlatformAdmin(ctx, "user-2")

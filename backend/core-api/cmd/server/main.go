@@ -11,6 +11,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/api"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	applicationspg "github.com/example/core-platform/backend/core-api/internal/applications/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/audit"
+	auditpg "github.com/example/core-platform/backend/core-api/internal/audit/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/authz"
 	"github.com/example/core-platform/backend/core-api/internal/authz/openfga"
 	authzpg "github.com/example/core-platform/backend/core-api/internal/authz/postgres"
@@ -116,7 +118,15 @@ func main() {
 		logger.Error("failed to initialise openfga authorization provider", "error", err)
 		os.Exit(1)
 	}
-	authzSvc := authz.NewService(authzpg.New(pool), openfgaProvider)
+	// authz.Service needs to record audit events, and audit.Service needs
+	// authz.Service as its own AdminChecker - a construction-order cycle
+	// broken by wiring the recorder in two phases (see
+	// internal/api/audit_adapter.go's doc comment for why this is safe).
+	roleChangeAuditRecorder := api.NewRoleChangeAuditRecorder()
+	authzSvc := authz.NewService(authzpg.New(pool), openfgaProvider, roleChangeAuditRecorder, logger)
+	auditSvc := audit.NewService(auditpg.New(pool), authzSvc)
+	roleChangeAuditRecorder.SetAuditService(auditSvc)
+
 	tenantsSvc := tenants.NewService(tenantspg.New(pool))
 	relationshipsSvc := relationships.NewService(relationshipspg.New(pool))
 	groupsSvc := groups.NewService(groupspg.New(pool))
@@ -163,7 +173,7 @@ func main() {
 
 	remoteConfigSvc := remoteconfig.NewService(remoteconfigpg.New(pool), authzSvc)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc))
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {
