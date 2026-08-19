@@ -72,14 +72,14 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "20 / 30", "67%"),
+    ("Phases complete", "21 / 30", "70%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
     ("Shared Go packages", "1", "packages/go/platformkit"),
-    ("Domain modules (core-api)", "20", "one per completed phase"),
-    ("Live HTTP endpoints", "110", "see 'API Endpoints' sheet"),
-    ("DB migrations", "18", "data/migrations/0001-0018"),
+    ("Domain modules (core-api)", "21", "one per completed phase"),
+    ("Live HTTP endpoints", "131", "see 'API Endpoints' sheet"),
+    ("DB migrations", "19", "data/migrations/0001-0019"),
     ("Real infra dependencies", "9", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, OTel"),
-    ("Commits so far", "23", "see git log"),
+    ("Commits so far", "25", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -134,8 +134,8 @@ roadmap_rows = [
     (18, "Done", "Remote Configuration", "Typed key/value store scoped by (AppID, Environment, Key), full change-audit trail, config.updated/deleted events.", "9a0ad7b"),
     (19, "Done", "Audit", "Central Audit Service: actor/action/resource/timestamp/correlation/app/tenant/device/metadata. Immutable by omission AND a DB trigger.", "2629e91"),
     (20, "Done", "Privacy", "Consent (append-only), preferences, retention policy, and cross-module ExportUserData/DeleteUserData via an Exporter/Deleter registry (users/devices/files/audit-export-only). Coordinated by a Temporal workflow core-api runs its own embedded worker for, since worker (separate module) can't reach core-api's internal packages.", "44299b2"),
-    (21, "Next up", "Trust & Safety", "Reusable Block/Mute/Report/ModerationCase/Suspension/Ban/Appeal, plus rate limiting, spam protection, abuse signals. Product-specific report reasons pluggable.", "-"),
-    (22, "Pending", "Billing / Entitlements", "Separate Payment from Entitlement - products ask 'has entitlement X', never 'is the Stripe subscription active'. Provider abstraction first (Stripe, Apple IAP, Google Play).", "-"),
+    (21, "Done", "Trust & Safety", "Mute/Report->ModerationCase (deduplicated)/Suspension/Ban/Appeal - Block reuses Phase 8's relationships, not duplicated. A new requireActive middleware makes Suspension/Ban actually restrict access platform-wide from one place. New shared ratelimit package (Valkey-backed) gates report spam; a critical AbuseSignal auto-opens a case.", "7af4c58"),
+    (22, "Next up", "Billing / Entitlements", "Separate Payment from Entitlement - products ask 'has entitlement X', never 'is the Stripe subscription active'. Provider abstraction first (Stripe, Apple IAP, Google Play).", "-"),
     (23, "Pending", "Analytics", "Generic analytics event envelope (event_name/user_id/anonymous_id/app_id/session_id/timestamp/properties/context). Operational DBs must not become analytics DBs - pipeline foundation for ClickHouse/warehouse/data lake.", "-"),
     (24, "Pending", "AI Gateway", "Provider-neutral interface (OpenAI/Anthropic/Google/local models/Ollama/vLLM) with model routing, quotas, token/cost tracking, audit, timeouts, fallback. Products never call AI vendors directly.", "-"),
     (25, "Pending", "Admin Portal", "The control-plane UI (apps/admin, Next.js) - visibility into apps/users/sessions/devices/roles/tenants/relationships/messages/notifications/files/jobs/flags/config/moderation/audit/health/deployments, always through service APIs, never direct DB queries.", "-"),
@@ -179,7 +179,7 @@ for n, name in [
     (8, "Relationships / Social Graph"), (9, "Groups / Circles"), (10, "Realtime Platform"),
     (11, "Messaging"), (12, "Notification Platform"), (13, "File / Media Platform"),
     (14, "Search Platform"), (15, "Background Jobs"), (16, "Workflows"), (17, "Feature Flags"),
-    (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"),
+    (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"), (21, "Trust & Safety"),
 ]:
     done(n, f"Phase {n}: {name} implemented, unit-tested, live-validated, documented, committed")
 
@@ -198,9 +198,21 @@ done(20, "Privacy: privacy preferences")
 done(20, "Privacy: coordinate deletion through workflows/events - core-api's own embedded Temporal worker")
 pending(20, "Privacy: notifications module as an Export/Delete participant", "Deliberately deferred to prove the registry makes this a 2-line addition later, not a framework change")
 pending(20, "Privacy: relationships/groups/messaging as participants", "Deferred - shared multi-user data needs a redaction strategy this phase's per-user-in-isolation registry doesn't fit")
+done(21, "Trust & Safety: Block", "Reused Phase 8's relationships (Status='blocked'), deliberately not duplicated")
+done(21, "Trust & Safety: Mute")
+done(21, "Trust & Safety: Report -> ModerationCase (deduplicated via partial unique index)")
+done(21, "Trust & Safety: Suspension")
+done(21, "Trust & Safety: Ban")
+done(21, "Trust & Safety: Appeal (approving lifts the target restriction)")
+done(21, "Trust & Safety: rate limiting (new platformkit/ratelimit, Valkey-backed)")
+done(21, "Trust & Safety: spam protection (5 reports/hour per reporter)")
+done(21, "Trust & Safety: abuse signals (critical severity auto-opens a case)")
+done(21, "Trust & Safety: pluggable product-specific report reasons (free-form Reason field)")
+done(21, "Trust & Safety: Suspension/Ban actually restrict access (new requireActive middleware, one entry point)")
+pending(21, "Trust & Safety: WebSocket disconnect on suspension/ban", "Deferred - only HTTP access is gated; an existing realtime-gateway connection isn't forcibly closed")
+pending(21, "Trust & Safety: aggregating lower-severity signals over a time window", "Deferred - a real abuse-detection engine is out of this phase's scope; only single-critical-signal escalation is implemented")
 
 for n, name, items in [
-    (21, "Trust & Safety", ["Block", "Mute", "Report", "ModerationCase", "Suspension", "Ban", "Appeal", "rate limiting", "spam protection", "abuse signals", "pluggable product-specific report reasons"]),
     (22, "Billing / Entitlements", ["Payment model", "Entitlement model (kept separate from Payment)", "provider abstraction (implement first)", "Stripe adapter", "Apple IAP adapter", "Google Play adapter"]),
     (23, "Analytics", ["generic analytics event envelope (event_name/user_id/anonymous_id/app_id/session_id/timestamp/properties/context)", "keep operational DBs out of the analytics path", "pipeline foundation for ClickHouse/warehouse/data lake"]),
     (24, "AI Gateway", ["provider-neutral interface (OpenAI/Anthropic/Google/local/Ollama/vLLM)", "model routing", "quotas", "token usage tracking", "cost tracking", "audit integration", "prompt/version metadata", "timeouts", "fallback"]),
@@ -254,6 +266,7 @@ module_rows = [
     ("audit", "core-api", "Central, immutable audit trail (API-omission + DB trigger enforced)", "audit_events", "Open to record; platform.admin-only to read", "Phase 19"),
     ("privacy", "core-api", "Consent, preferences, retention policy, cross-module export/delete via a registry", "privacy_consents, privacy_preferences, retention_policies, data_export_requests, data_deletion_requests", "Self for own data; platform.admin for retention policies", "Phase 20"),
     ("privacy: embedded Temporal worker", "core-api", "Runs privacy's own export/deletion workflows in-process (task queue privacy-tasks)", "none (Temporal-native state)", "n/a (background, inside core-api's own process)", "Phase 20"),
+    ("trustsafety", "core-api", "Mute/Report/ModerationCase/Suspension/Ban/Appeal/AbuseSignal - Block reuses Phase 8's relationships", "mutes, moderation_cases, reports, suspensions, bans, appeals, abuse_signals", "Self for own mutes/appeals; moderator-or-admin for case/suspension/ban management", "Phase 21"),
 ]
 ws4 = add_sheet(
     "Modules",
@@ -381,6 +394,27 @@ endpoint_rows = [
     E("GET", "/v1/privacy/export/{id}/download", "privacy", "Self or platform.admin", "presigned MinIO/S3 GET"),
     E("POST", "/v1/privacy/delete", "privacy", "Authenticated (self)", "starts a Temporal workflow"),
     E("GET", "/v1/privacy/delete/{id}", "privacy", "Self or platform.admin", "a self-deleted user must use an admin to check this"),
+    E("POST", "/v1/trustsafety/mutes", "trustsafety", "Authenticated (self)", "one-directional, silent"),
+    E("GET", "/v1/trustsafety/mutes", "trustsafety", "Authenticated (self)", "exempt from requireActive - always reachable"),
+    E("DELETE", "/v1/trustsafety/mutes/{userId}", "trustsafety", "Authenticated (self)", ""),
+    E("POST", "/v1/trustsafety/reports", "trustsafety", "Authenticated (self)", "rate-limited 5/hour; dedupes onto one case"),
+    E("GET", "/v1/trustsafety/reports/{id}", "trustsafety", "Reporter or moderator/admin", ""),
+    E("GET", "/v1/trustsafety/cases", "trustsafety", "Moderator or platform.admin", "?status="),
+    E("GET", "/v1/trustsafety/cases/{id}", "trustsafety", "Moderator or platform.admin", ""),
+    E("GET", "/v1/trustsafety/cases/{id}/reports", "trustsafety", "Moderator or platform.admin", ""),
+    E("PATCH", "/v1/trustsafety/cases/{id}/assign", "trustsafety", "Moderator or platform.admin", ""),
+    E("PATCH", "/v1/trustsafety/cases/{id}", "trustsafety", "Moderator or platform.admin", "resolve/dismiss"),
+    E("POST", "/v1/trustsafety/suspensions", "trustsafety", "Moderator or platform.admin", "temporary, EndsAt required"),
+    E("GET", "/v1/trustsafety/suspensions", "trustsafety", "Self or moderator/admin", "?userId="),
+    E("POST", "/v1/trustsafety/suspensions/{id}/lift", "trustsafety", "Moderator or platform.admin", ""),
+    E("POST", "/v1/trustsafety/bans", "trustsafety", "Moderator or platform.admin", "permanent until lifted"),
+    E("GET", "/v1/trustsafety/bans", "trustsafety", "Self or moderator/admin", "?userId="),
+    E("POST", "/v1/trustsafety/bans/{id}/lift", "trustsafety", "Moderator or platform.admin", ""),
+    E("POST", "/v1/trustsafety/appeals", "trustsafety", "Authenticated (self, must own target)", "exempt from requireActive - always reachable"),
+    E("GET", "/v1/trustsafety/appeals", "trustsafety", "Self or moderator/admin", "exempt from requireActive - always reachable"),
+    E("POST", "/v1/trustsafety/appeals/{id}/review", "trustsafety", "Moderator or platform.admin", "approving lifts the target restriction"),
+    E("POST", "/v1/trustsafety/signals", "trustsafety", "Authenticated", "critical severity auto-opens a case"),
+    E("GET", "/v1/trustsafety/signals", "trustsafety", "Moderator or platform.admin", "?resourceType=&resourceId="),
 ]
 ws5 = add_sheet(
     "API Endpoints",

@@ -40,7 +40,7 @@ A new shared package, `packages/go/platformkit/ratelimit` (Valkey/Redis-backed f
 
 - `domain.go` - `Mute`, `Report`, `ModerationCase`, `Suspension`, `Ban`, `Appeal`, `AbuseSignal`, `Repository`.
 - `service.go` - `Service`, the moderator/rate-limiter dependencies, `IsRestricted` (the middleware hook).
-- `http.go` - the REST surface, 18 routes.
+- `http.go` - the REST surface, 21 routes.
 - `postgres/`, `memory/` - `Repository` implementations; `OpenOrAttachCase` is implemented in both (an `INSERT ... ON CONFLICT` in Postgres, a linear scan under a mutex in memory).
 
 ## Storage
