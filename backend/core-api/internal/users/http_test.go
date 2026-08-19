@@ -33,6 +33,10 @@ func (f fakeAccess) CanViewProfile(ctx context.Context, subjectUserID, targetUse
 	return f.allow, nil
 }
 
+func (f fakeAccess) IsPlatformAdmin(ctx context.Context, subjectUserID string) (bool, error) {
+	return f.allow, nil
+}
+
 func TestMeReturnsAttachedUser(t *testing.T) {
 	svc := newService()
 	u, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Ada"})
@@ -147,5 +151,55 @@ func TestGetByIDDeniedByAccessCheckerReturns403(t *testing.T) {
 
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestListRequiresPlatformAdmin(t *testing.T) {
+	svc := newService()
+	caller, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Caller"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	users.RegisterRoutes(mux, svc, fixedUser(caller), fakeAccess{allow: false})
+
+	req := httptest.NewRequest("GET", "/v1/users", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for a non-admin, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestListReturnsUsersForAnAdmin(t *testing.T) {
+	svc := newService()
+	admin, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Admin"})
+	if err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+	if _, err := svc.Create(context.Background(), users.CreateInput{DisplayName: "Someone Else"}); err != nil {
+		t.Fatalf("create other: %v", err)
+	}
+
+	mux := http.NewServeMux()
+	users.RegisterRoutes(mux, svc, fixedUser(admin), fakeAccess{allow: true})
+
+	req := httptest.NewRequest("GET", "/v1/users", nil)
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var body struct {
+		Items []map[string]any `json:"items"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(body.Items) != 2 {
+		t.Fatalf("expected 2 users, got %d: %+v", len(body.Items), body.Items)
 	}
 }

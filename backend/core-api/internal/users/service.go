@@ -38,6 +38,23 @@ func (s *Service) Delete(ctx context.Context, id string) (User, error) {
 	return s.repo.Delete(ctx, id)
 }
 
+const (
+	defaultListLimit = 50
+	maxListLimit     = 200
+)
+
+// List is platform.admin-only, gated at the HTTP layer (see http.go's
+// AccessChecker.IsPlatformAdmin) rather than here - the same split this
+// module already uses for Get's self-or-admin CanViewProfile check,
+// kept consistent rather than introducing a second, Service-level admin
+// dependency just for this one method.
+func (s *Service) List(ctx context.Context, params ListParams) (ListResult, error) {
+	if params.Limit <= 0 || params.Limit > maxListLimit {
+		params.Limit = defaultListLimit
+	}
+	return s.repo.List(ctx, params)
+}
+
 // IdentityLinker is the one thing EnsureForIdentity needs from identity -
 // declared here, satisfied structurally by identity.Service, so this
 // package never imports identity and stays independently understandable.

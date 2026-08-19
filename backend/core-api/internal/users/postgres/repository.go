@@ -4,10 +4,12 @@ package postgres
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -148,6 +150,74 @@ func (r *Repository) Delete(ctx context.Context, id string) (users.User, error) 
 		return users.User{}, fmt.Errorf("commit tx: %w", err)
 	}
 	return u, nil
+}
+
+// List excludes deleted users - a browsable admin listing showing rows
+// that no longer exist from any normal API's perspective would be
+// actively misleading, the same "deleted is gone" rule Get already
+// enforces.
+func (r *Repository) List(ctx context.Context, params users.ListParams) (users.ListResult, error) {
+	var rows pgx.Rows
+	var err error
+	if params.Cursor == "" {
+		rows, err = r.pool.Query(ctx,
+			`SELECT `+selectColumns+` FROM users WHERE status <> 'deleted' ORDER BY created_at, id LIMIT $1`,
+			params.Limit+1)
+	} else {
+		afterCreated, afterID, decodeErr := decodeCursor(params.Cursor)
+		if decodeErr != nil {
+			return users.ListResult{}, &users.ValidationError{Message: "invalid cursor"}
+		}
+		rows, err = r.pool.Query(ctx,
+			`SELECT `+selectColumns+` FROM users
+			 WHERE status <> 'deleted' AND (created_at, id) > ($1, $2)
+			 ORDER BY created_at, id LIMIT $3`,
+			afterCreated, afterID, params.Limit+1)
+	}
+	if err != nil {
+		return users.ListResult{}, fmt.Errorf("list users: %w", err)
+	}
+	defer rows.Close()
+
+	var items []users.User
+	for rows.Next() {
+		var u users.User
+		if err := rows.Scan(&u.ID, &u.DisplayName, &u.AvatarRef, &u.Locale, &u.Timezone, &u.Status, &u.CreatedAt, &u.UpdatedAt); err != nil {
+			return users.ListResult{}, fmt.Errorf("scan user: %w", err)
+		}
+		items = append(items, u)
+	}
+	if err := rows.Err(); err != nil {
+		return users.ListResult{}, fmt.Errorf("iterate users: %w", err)
+	}
+
+	result := users.ListResult{Items: items}
+	if len(items) > params.Limit {
+		result.Items = items[:params.Limit]
+		last := result.Items[len(result.Items)-1]
+		result.NextCursor = encodeCursor(last.CreatedAt, last.ID)
+	}
+	return result, nil
+}
+
+func encodeCursor(t time.Time, id string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(t.Format(time.RFC3339Nano) + "|" + id))
+}
+
+func decodeCursor(s string) (time.Time, string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	parts := strings.SplitN(string(raw), "|", 2)
+	if len(parts) != 2 {
+		return time.Time{}, "", errors.New("malformed cursor")
+	}
+	t, err := time.Parse(time.RFC3339Nano, parts[0])
+	if err != nil {
+		return time.Time{}, "", err
+	}
+	return t, parts[1], nil
 }
 
 func insertOutboxEvent(ctx context.Context, tx pgx.Tx, eventType string, u users.User) error {

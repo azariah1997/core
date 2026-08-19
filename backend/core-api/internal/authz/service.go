@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 )
 
@@ -114,4 +115,29 @@ func (s *Service) IsPlatformAdmin(ctx context.Context, userID string) (bool, err
 // relation to check.
 func (s *Service) IsModerator(ctx context.Context, userID string) (bool, error) {
 	return s.HasRole(ctx, userID, RoleModerator)
+}
+
+// ErrForbidden is returned by RolesFor when the caller is neither the
+// subject nor a platform.admin - authz's http.go (Phase 25) is the
+// first HTTP surface this package has ever had, so this is also its
+// first error a handler needs to translate into a status code.
+var ErrForbidden = errors.New("not permitted to view this user's roles")
+
+// RolesFor is platform.admin-only unless the caller is asking about
+// themselves - "Roles" is one of the roadmap's own named admin-portal
+// visibility areas, and before Phase 25 there was no way to answer "what
+// roles does this user have" except a throwaway Go program (the same one
+// every earlier phase's live validation needed to grant itself
+// moderator/platform.admin). This is that gap, closed.
+func (s *Service) RolesFor(ctx context.Context, callerID, targetUserID string) ([]Role, error) {
+	if callerID != targetUserID {
+		isAdmin, err := s.IsPlatformAdmin(ctx, callerID)
+		if err != nil {
+			return nil, err
+		}
+		if !isAdmin {
+			return nil, ErrForbidden
+		}
+	}
+	return s.roles.RolesFor(ctx, targetUserID)
 }

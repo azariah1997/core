@@ -2,6 +2,7 @@
   "realm": "core",
   "enabled": true,
   "sslRequired": "none",
+  "accessTokenLifespan": 1800,
   "requiredActions": [
     { "alias": "VERIFY_PROFILE", "name": "Verify Profile", "providerId": "VERIFY_PROFILE", "enabled": false, "defaultAction": false, "priority": 90 }
   ],

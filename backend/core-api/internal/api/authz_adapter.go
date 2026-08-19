@@ -31,3 +31,10 @@ func (c *profileAccessChecker) CanViewProfile(ctx context.Context, subjectUserID
 	// once there's real relationship data to check against.
 	return c.authzSvc.IsPlatformAdmin(ctx, subjectUserID)
 }
+
+// IsPlatformAdmin satisfies the rest of users.AccessChecker (Phase 25's
+// addition, gating List) as a direct passthrough - *authz.Service
+// already has the exact method, no translation needed.
+func (c *profileAccessChecker) IsPlatformAdmin(ctx context.Context, subjectUserID string) (bool, error) {
+	return c.authzSvc.IsPlatformAdmin(ctx, subjectUserID)
+}

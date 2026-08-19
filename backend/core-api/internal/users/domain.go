@@ -90,6 +90,21 @@ func (in UpdateInput) Validate() error {
 	return nil
 }
 
+// ListParams/ListResult back List - Phase 25's addition, this module's
+// first "list everyone" capability (every earlier phase only ever
+// needed self-or-one-other-user access). Cursor pagination follows the
+// same (created_at, id) convention applications.List established in
+// Phase 2.
+type ListParams struct {
+	Limit  int
+	Cursor string
+}
+
+type ListResult struct {
+	Items      []User
+	NextCursor string
+}
+
 // Repository is the storage-agnostic boundary. Update additionally emits
 // user.deactivated instead of user.updated when Status transitions to
 // deactivated, so lifecycle changes stay distinguishable in the event
@@ -99,4 +114,5 @@ type Repository interface {
 	Get(ctx context.Context, id string) (User, error)
 	Update(ctx context.Context, id string, in UpdateInput) (User, error)
 	Delete(ctx context.Context, id string) (User, error)
+	List(ctx context.Context, params ListParams) (ListResult, error)
 }

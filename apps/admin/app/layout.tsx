@@ -1,1 +1,14 @@
-export default function RootLayout({children}:{children:React.ReactNode}){return <html lang="en"><body style={{fontFamily:"system-ui",margin:0,background:"#0b1020",color:"#eef2ff"}}>{children}</body></html>}
+import "./globals.css";
+
+export const metadata = {
+  title: "Core Platform Admin",
+  description: "Control-plane UI for the Core Platform",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}

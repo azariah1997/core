@@ -3,6 +3,8 @@ package memory
 
 import (
 	"context"
+	"encoding/base64"
+	"sort"
 	"sync"
 	"time"
 
@@ -67,6 +69,58 @@ func (r *Repository) Update(ctx context.Context, id string, in users.UpdateInput
 	u.UpdatedAt = time.Now().UTC()
 	r.byID[id] = u
 	return u, nil
+}
+
+func (r *Repository) List(ctx context.Context, params users.ListParams) (users.ListResult, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	var all []users.User
+	for _, u := range r.byID {
+		if u.Status != users.StatusDeleted {
+			all = append(all, u)
+		}
+	}
+	sort.Slice(all, func(i, j int) bool {
+		if all[i].CreatedAt.Equal(all[j].CreatedAt) {
+			return all[i].ID < all[j].ID
+		}
+		return all[i].CreatedAt.Before(all[j].CreatedAt)
+	})
+
+	start := 0
+	if params.Cursor != "" {
+		afterID, err := decodeCursor(params.Cursor)
+		if err != nil {
+			return users.ListResult{}, &users.ValidationError{Message: "invalid cursor"}
+		}
+		for i, u := range all {
+			if u.ID == afterID {
+				start = i + 1
+				break
+			}
+		}
+	}
+	end := start + params.Limit
+	if end > len(all) {
+		end = len(all)
+	}
+	if start > len(all) {
+		start = len(all)
+	}
+	page := append([]users.User{}, all[start:end]...)
+
+	result := users.ListResult{Items: page}
+	if end < len(all) {
+		result.NextCursor = encodeCursor(page[len(page)-1].ID)
+	}
+	return result, nil
+}
+
+func encodeCursor(id string) string { return base64.RawURLEncoding.EncodeToString([]byte(id)) }
+func decodeCursor(s string) (string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(s)
+	return string(raw), err
 }
 
 func (r *Repository) Delete(ctx context.Context, id string) (users.User, error) {

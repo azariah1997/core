@@ -76,6 +76,9 @@ func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Se
 	// analytics/http.go's RegisterTrackRoute and analytics/README.md.
 	analytics.RegisterTrackRoute(mux, analyticsSvc)
 	aigateway.RegisterRoutes(mux, aiGatewaySvc, requireActive(identitySvc, usersSvc, trustSafetySvc))
+	// authz's first-ever HTTP surface (Phase 25) - role management is
+	// gated platform.admin-only inside the handlers themselves.
+	authz.RegisterRoutes(mux, authzSvc, requireActive(identitySvc, usersSvc, trustSafetySvc))
 
 	mux.HandleFunc("GET /v1/platform", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, 200, map[string]any{"name": cfg.PlatformName, "environment": cfg.Env, "apiVersion": "v1"})

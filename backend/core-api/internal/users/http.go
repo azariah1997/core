@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/example/core-platform/packages/go/platformkit/apperr"
 	"github.com/example/core-platform/packages/go/platformkit/httpx"
@@ -25,14 +26,17 @@ func FromContext(ctx context.Context) (User, bool) {
 	return u, ok
 }
 
-// AccessChecker decides whether one user may view another's profile - the
-// one thing GET /v1/users/{id} needs from authz. Declared here, satisfied
-// structurally by an adapter in internal/api, so this package never
-// imports authz or knows its resource-type vocabulary; the actual policy
-// (self access, platform.admin, any future relationship-based grant) is
-// entirely authz's decision, not this package's.
+// AccessChecker decides whether one user may view another's profile (or,
+// for List, browse everyone) - declared here, satisfied structurally by
+// an adapter in internal/api, so this package never imports authz or
+// knows its resource-type vocabulary; the actual policy (self access,
+// platform.admin, any future relationship-based grant) is entirely
+// authz's decision, not this package's. IsPlatformAdmin is Phase 25's
+// addition, gating List - this module's first "browse everyone"
+// capability, needed for the Admin Portal's "Users" visibility.
 type AccessChecker interface {
 	CanViewProfile(ctx context.Context, subjectUserID, targetUserID string) (bool, error)
+	IsPlatformAdmin(ctx context.Context, subjectUserID string) (bool, error)
 }
 
 // RegisterRoutes wires the User endpoints. requireUser must resolve the
@@ -45,6 +49,7 @@ type AccessChecker interface {
 func RegisterRoutes(mux *http.ServeMux, svc *Service, requireUser func(http.Handler) http.Handler, access AccessChecker) {
 	mux.Handle("GET /v1/users/me", requireUser(http.HandlerFunc(meHandler)))
 	mux.Handle("PATCH /v1/users/me", requireUser(updateMeHandler(svc)))
+	mux.Handle("GET /v1/users", requireUser(listHandler(svc, access)))
 	mux.Handle("GET /v1/users/{id}", requireUser(getHandler(svc, access)))
 }
 
@@ -104,6 +109,36 @@ func updateMeHandler(svc *Service) http.HandlerFunc {
 			return
 		}
 		httpx.JSON(w, http.StatusOK, toResponse(updated))
+	}
+}
+
+func listHandler(svc *Service, access AccessChecker) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		caller, ok := FromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "user missing from context"))
+			return
+		}
+		isAdmin, err := access.IsPlatformAdmin(r.Context(), caller.ID)
+		if err != nil {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "authorization check failed"))
+			return
+		}
+		if !isAdmin {
+			apperr.Write(w, r, apperr.New(apperr.CodeAccessDenied, "platform.admin required"))
+			return
+		}
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		result, err := svc.List(r.Context(), ListParams{Limit: limit, Cursor: r.URL.Query().Get("cursor")})
+		if err != nil {
+			writeDomainError(w, r, err)
+			return
+		}
+		items := make([]userResponse, 0, len(result.Items))
+		for _, u := range result.Items {
+			items = append(items, toResponse(u))
+		}
+		httpx.JSON(w, http.StatusOK, map[string]any{"items": items, "nextCursor": result.NextCursor})
 	}
 }
 
