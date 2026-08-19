@@ -72,14 +72,14 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "21 / 30", "70%"),
+    ("Phases complete", "22 / 30", "73%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
     ("Shared Go packages", "1", "packages/go/platformkit"),
-    ("Domain modules (core-api)", "21", "one per completed phase"),
-    ("Live HTTP endpoints", "131", "see 'API Endpoints' sheet"),
-    ("DB migrations", "19", "data/migrations/0001-0019"),
+    ("Domain modules (core-api)", "22", "one per completed phase"),
+    ("Live HTTP endpoints", "137", "see 'API Endpoints' sheet"),
+    ("DB migrations", "20", "data/migrations/0001-0020"),
     ("Real infra dependencies", "9", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, OTel"),
-    ("Commits so far", "25", "see git log"),
+    ("Commits so far", "28", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -135,8 +135,8 @@ roadmap_rows = [
     (19, "Done", "Audit", "Central Audit Service: actor/action/resource/timestamp/correlation/app/tenant/device/metadata. Immutable by omission AND a DB trigger.", "2629e91"),
     (20, "Done", "Privacy", "Consent (append-only), preferences, retention policy, and cross-module ExportUserData/DeleteUserData via an Exporter/Deleter registry (users/devices/files/audit-export-only). Coordinated by a Temporal workflow core-api runs its own embedded worker for, since worker (separate module) can't reach core-api's internal packages.", "44299b2"),
     (21, "Done", "Trust & Safety", "Mute/Report->ModerationCase (deduplicated)/Suspension/Ban/Appeal - Block reuses Phase 8's relationships, not duplicated. A new requireActive middleware makes Suspension/Ban actually restrict access platform-wide from one place. New shared ratelimit package (Valkey-backed) gates report spam; a critical AbuseSignal auto-opens a case.", "7af4c58"),
-    (22, "Next up", "Billing / Entitlements", "Separate Payment from Entitlement - products ask 'has entitlement X', never 'is the Stripe subscription active'. Provider abstraction first (Stripe, Apple IAP, Google Play).", "-"),
-    (23, "Pending", "Analytics", "Generic analytics event envelope (event_name/user_id/anonymous_id/app_id/session_id/timestamp/properties/context). Operational DBs must not become analytics DBs - pipeline foundation for ClickHouse/warehouse/data lake.", "-"),
+    (22, "Done", "Billing / Entitlements", "Entitlement (platform truth, HasEntitlement) kept separate from Payment (provider transaction record). PaymentProvider abstraction + registry; billing/stripe implements Stripe's real webhook HMAC signature scheme, live-validated without a Stripe account via self-signed test payloads. Apple IAP/Google Play deliberately deferred - no sandbox credentials available.", "8fcc87f"),
+    (23, "Next up", "Analytics", "Generic analytics event envelope (event_name/user_id/anonymous_id/app_id/session_id/timestamp/properties/context). Operational DBs must not become analytics DBs - pipeline foundation for ClickHouse/warehouse/data lake.", "-"),
     (24, "Pending", "AI Gateway", "Provider-neutral interface (OpenAI/Anthropic/Google/local models/Ollama/vLLM) with model routing, quotas, token/cost tracking, audit, timeouts, fallback. Products never call AI vendors directly.", "-"),
     (25, "Pending", "Admin Portal", "The control-plane UI (apps/admin, Next.js) - visibility into apps/users/sessions/devices/roles/tenants/relationships/messages/notifications/files/jobs/flags/config/moderation/audit/health/deployments, always through service APIs, never direct DB queries.", "-"),
     (26, "Pending", "Backstage", "Integrate Backstage as the developer portal - every service/module exposes metadata (owner, lifecycle, repo, docs, dependencies, APIs, events, DB ownership, dashboards, runbooks). Backstage becomes the map of the platform.", "-"),
@@ -180,6 +180,7 @@ for n, name in [
     (11, "Messaging"), (12, "Notification Platform"), (13, "File / Media Platform"),
     (14, "Search Platform"), (15, "Background Jobs"), (16, "Workflows"), (17, "Feature Flags"),
     (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"), (21, "Trust & Safety"),
+    (22, "Billing / Entitlements"),
 ]:
     done(n, f"Phase {n}: {name} implemented, unit-tested, live-validated, documented, committed")
 
@@ -211,9 +212,14 @@ done(21, "Trust & Safety: pluggable product-specific report reasons (free-form R
 done(21, "Trust & Safety: Suspension/Ban actually restrict access (new requireActive middleware, one entry point)")
 pending(21, "Trust & Safety: WebSocket disconnect on suspension/ban", "Deferred - only HTTP access is gated; an existing realtime-gateway connection isn't forcibly closed")
 pending(21, "Trust & Safety: aggregating lower-severity signals over a time window", "Deferred - a real abuse-detection engine is out of this phase's scope; only single-critical-signal escalation is implemented")
+done(22, "Billing: Payment model (provider-specific transaction record)")
+done(22, "Billing: Entitlement model (platform-facing truth, kept separate from Payment)")
+done(22, "Billing: provider abstraction (PaymentProvider interface + registry, implemented first)")
+done(22, "Billing: Stripe adapter", "Real HMAC-SHA256 webhook signature verification, live-validated without a Stripe account via self-signed test payloads")
+pending(22, "Billing: Apple IAP adapter", "Deferred - needs real App Store Server API credentials this environment doesn't have")
+pending(22, "Billing: Google Play adapter", "Deferred - needs real Play Developer API credentials this environment doesn't have")
 
 for n, name, items in [
-    (22, "Billing / Entitlements", ["Payment model", "Entitlement model (kept separate from Payment)", "provider abstraction (implement first)", "Stripe adapter", "Apple IAP adapter", "Google Play adapter"]),
     (23, "Analytics", ["generic analytics event envelope (event_name/user_id/anonymous_id/app_id/session_id/timestamp/properties/context)", "keep operational DBs out of the analytics path", "pipeline foundation for ClickHouse/warehouse/data lake"]),
     (24, "AI Gateway", ["provider-neutral interface (OpenAI/Anthropic/Google/local/Ollama/vLLM)", "model routing", "quotas", "token usage tracking", "cost tracking", "audit integration", "prompt/version metadata", "timeouts", "fallback"]),
     (25, "Admin Portal", ["control-plane UI in apps/admin", "visibility: Applications", "visibility: Users/Sessions/Devices", "visibility: Roles/Permissions", "visibility: Tenants/Relationships", "visibility: Messages/Notifications", "visibility: Files/Jobs", "visibility: Feature flags/Configuration", "visibility: Moderation/Audit", "visibility: System health/Deployments", "must go through service APIs, never direct DB queries"]),
@@ -267,6 +273,8 @@ module_rows = [
     ("privacy", "core-api", "Consent, preferences, retention policy, cross-module export/delete via a registry", "privacy_consents, privacy_preferences, retention_policies, data_export_requests, data_deletion_requests", "Self for own data; platform.admin for retention policies", "Phase 20"),
     ("privacy: embedded Temporal worker", "core-api", "Runs privacy's own export/deletion workflows in-process (task queue privacy-tasks)", "none (Temporal-native state)", "n/a (background, inside core-api's own process)", "Phase 20"),
     ("trustsafety", "core-api", "Mute/Report/ModerationCase/Suspension/Ban/Appeal/AbuseSignal - Block reuses Phase 8's relationships", "mutes, moderation_cases, reports, suspensions, bans, appeals, abuse_signals", "Self for own mutes/appeals; moderator-or-admin for case/suspension/ban management", "Phase 21"),
+    ("billing", "core-api", "Entitlement (platform truth) kept separate from Payment (provider transaction record); PaymentProvider abstraction + registry", "entitlements, payments", "Self for own entitlements/payments; platform.admin for manual grants", "Phase 22"),
+    ("billing/stripe", "core-api", "Real Stripe webhook HMAC-SHA256 signature verification - the one live-testable PaymentProvider this phase ships", "none (stateless verification)", "n/a (provider-signature-authenticated, not a Bearer route)", "Phase 22"),
 ]
 ws4 = add_sheet(
     "Modules",
@@ -415,6 +423,12 @@ endpoint_rows = [
     E("POST", "/v1/trustsafety/appeals/{id}/review", "trustsafety", "Moderator or platform.admin", "approving lifts the target restriction"),
     E("POST", "/v1/trustsafety/signals", "trustsafety", "Authenticated", "critical severity auto-opens a case"),
     E("GET", "/v1/trustsafety/signals", "trustsafety", "Moderator or platform.admin", "?resourceType=&resourceId="),
+    E("GET", "/v1/billing/entitlements", "billing", "Self or platform.admin", "?userId="),
+    E("GET", "/v1/billing/entitlements/check/{key}", "billing", "Authenticated (self)", "the literal 'do I have entitlement X' check"),
+    E("POST", "/v1/billing/entitlements", "billing", "platform.admin", "manual grant; source always \"manual:<adminId>\""),
+    E("POST", "/v1/billing/entitlements/{id}/revoke", "billing", "platform.admin", ""),
+    E("GET", "/v1/billing/payments", "billing", "Self or platform.admin", "?userId="),
+    E("POST", "/v1/billing/webhooks/{provider}", "billing", "Provider webhook signature (no Bearer token)", "the one route on this platform with no requireUser/requireActive"),
 ]
 ws5 = add_sheet(
     "API Endpoints",
