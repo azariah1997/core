@@ -3,4 +3,6 @@ owner: platform
 lifecycle: experimental
 dependencies:
   - users
-  - audit
+# Note: audit (backend/core-api/internal/audit) lives inside this module
+# too (see README) - it was never split into its own top-level entry in
+# modules/README.md's 16-domain list, so it's not a separate dependency.

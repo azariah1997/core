@@ -1,43 +1,376 @@
+# Backstage software catalog for Core Platform.
+#
+# Granularity: the 16 capability-boundary Components below (type:
+# domain-module) mirror modules/*/module.yaml exactly - that directory
+# already established this as the platform's chosen domain-ownership
+# grouping (see modules/README.md), so this file reuses it rather than
+# inventing a second, finer-grained taxonomy alongside the real 24
+# backend/core-api/internal/* packages docs/control's "Modules" sheet
+# already tracks at that finer grain.
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: platform
+  description: Owning team for every module, service, and app in this catalog today - a single team through Phase 26.
+spec:
+  type: team
+  children: []
+---
 apiVersion: backstage.io/v1alpha1
 kind: System
 metadata:
   name: core-platform
-  description: Shared application platform for all products
+  description: Shared application platform for all products - a generic, multi-product backend (Go services + Next.js admin + Flutter mobile + Terraform/Helm/Docker infra), built phase-by-phase against a 30-phase roadmap.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/VALIDATION.md
+      title: Validation history (every phase's live-validation pass)
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/docs/RUNBOOKS.md
+      title: Runbooks
 spec:
   owner: platform
+
+# ---------------------------------------------------------------------
+# Deployable services and apps
+# ---------------------------------------------------------------------
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: core-api
-  description: Public/domain API entry point
+  description: The main platform API - almost every domain module below is implemented inside this one Go service.
   annotations:
     github.com/project-slug: YOUR_ORG/core-platform
+    core-platform.io/dashboard: http://localhost:3000
+  links:
+    - url: http://localhost:8080/healthz
+      title: Local health check
 spec:
   type: service
   lifecycle: experimental
   owner: platform
   system: core-platform
   providesApis: [core-api]
+  consumesApis: [core-platform-events]
 ---
 apiVersion: backstage.io/v1alpha1
 kind: Component
 metadata:
   name: realtime-gateway
+  description: Standalone WebSocket service - hand-rolled RFC6455 connections, channel subscriptions, and TTL-based presence, fanned out across replicas via Valkey pub/sub.
+  annotations:
+    core-platform.io/dashboard: http://localhost:3000
+  links:
+    - url: http://localhost:8090/healthz
+      title: Local health check
 spec:
   type: service
   lifecycle: experimental
   owner: platform
   system: core-platform
+  dependsOn: [component:communication]
 ---
 apiVersion: backstage.io/v1alpha1
-kind: API
+kind: Component
 metadata:
-  name: core-api
+  name: worker
+  description: Background execution service - job runner, OpenSearch indexer, analytics NDJSON pipeline, and a Temporal workflow worker. A separate Go module from core-api, so it can never import core-api's internal packages directly.
+  annotations:
+    core-platform.io/dashboard: http://localhost:3000
+  links:
+    - url: http://localhost:8091/healthz
+      title: Local health check (health endpoint only)
 spec:
-  type: openapi
+  type: service
   lifecycle: experimental
   owner: platform
   system: core-platform
-  definition:
-    $text: ../contracts/openapi/core-api.yaml
+  consumesApis: [core-platform-events]
+  dependsOn: [component:events-workflows, component:content, component:analytics]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: admin
+  description: The Admin Portal (Phase 25) - a Next.js 15 App Router UI over core-api, real Keycloak-authenticated session, no direct database access.
+  links:
+    - url: http://localhost:3000
+      title: Local dev server (npm run dev, apps/admin)
+spec:
+  type: website
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  consumesApis: [core-api]
+
+# ---------------------------------------------------------------------
+# Domain modules (modules/*/module.yaml, same 16-domain grouping)
+# ---------------------------------------------------------------------
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: identity
+  description: Auth provider abstraction (Keycloak today), token validation, identity<->user linkage.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/identity/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: users
+  description: Platform person/account, profile, soft-delete lifecycle; also owns device/session registration and revocation.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/users/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:identity]
+  providesApis: [core-platform-events]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: access
+  description: Can(subject, action, resource) - RBAC roles plus a fine-grained OpenFGA-backed ReBAC check, the one authorization entry point every other domain module uses.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/access/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:identity, component:users]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: social
+  description: Generic relationship graph (request/accept/decline/remove/block) and generic Group/GroupMember primitive - the platform never hardcodes what a relationship or a group means.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/social/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:users, component:access]
+  providesApis: [core-platform-events]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: communication
+  description: Conversations/messages/delivery/read-state/reactions (core-api) plus real-time fan-out over WebSocket (realtime-gateway) - two services, one capability boundary.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/communication/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  dependsOn: [component:users, component:access, component:social]
+  providesApis: [core-platform-events]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: notifications
+  description: Notification/Template/Preference/Delivery across push/email/sms/in_app/realtime; only push is genuinely provider-tested against a real device-token check locally.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/notifications/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:users, component:configuration]
+  providesApis: [core-platform-events]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: content
+  description: Presigned file upload/download against real MinIO/S3 (files), and search documents over real OpenSearch, indexed asynchronously by worker (search).
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/content/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  dependsOn: [component:users, component:access]
+  providesApis: [core-platform-events]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: commerce
+  description: Entitlement (platform truth) kept separate from Payment (provider transaction record); Stripe adapter live-validated via real webhook HMAC signatures.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/commerce/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:users, component:access]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: events-workflows
+  description: Background jobs (immediate/scheduled/delayed/recurring/retry/dead-letter, executed by worker) and Temporal-backed durable workflows.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/events-workflows/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  dependsOn: [component:operations]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: configuration
+  description: Feature flags with deterministic percentage rollout, and a typed remote-config key/value store with a full change-audit trail.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/configuration/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:platform]
+  providesApis: [core-platform-events]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: trust-safety
+  description: Mute/Report->ModerationCase/Suspension/Ban/Appeal; a requireActive middleware makes an active Suspension/Ban actually restrict platform access from one place.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/trust-safety/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:users, component:access]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: privacy-compliance
+  description: Central immutable audit trail (trigger-enforced), plus consent/preferences/retention and cross-module export/deletion via a registry, coordinated by an embedded Temporal worker.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/privacy-compliance/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:users]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: analytics
+  description: Generic event envelope ingestion (this platform's one open, unauthenticated write endpoint) - a landing buffer only, batched to MinIO/S3 as NDJSON by worker, never queried in place.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/analytics/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  dependsOn: [component:events-workflows]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: ai
+  description: Provider-neutral completions API - "products must not call AI vendors directly" is enforced structurally. Real local inference via Ollama; OpenAI/Anthropic/Google structurally supported, not implemented.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/ai/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:access, component:events-workflows]
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: operations
+  description: platformkit (config, logging, errors, health, correlation IDs, OTel, graceful shutdown) - the shared foundation every Go service imports. No dependencies of its own.
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/operations/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  dependsOn: []
+---
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: platform
+  description: The Application Registry (which applications exist) and multi-tenancy (Tenant/Membership scoped to an Application).
+  links:
+    - url: https://github.com/YOUR_ORG/core-platform/blob/main/modules/platform/README.md
+      title: Module README
+spec:
+  type: domain-module
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  subcomponentOf: component:core-api
+  dependsOn: [component:operations]
+  providesApis: [core-platform-events]
+
+# ---------------------------------------------------------------------
+# APIs (core-api and core-platform-events) are defined in
+# contracts/openapi/catalog-info.yaml and contracts/asyncapi/catalog-info.yaml,
+# colocated with their spec files rather than declared here - Backstage's
+# file-location reader refuses to resolve a $text ref that traverses
+# outside the directory of the location that defined it, so a $text
+# pointing from here (catalog/) to a sibling contracts/ directory fails
+# at ingest time with "could not form a URL". Both files are registered
+# as additional catalog.locations in platform/backstage/app-config.yaml.
+# ---------------------------------------------------------------------

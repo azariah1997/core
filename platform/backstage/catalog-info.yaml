@@ -1,0 +1,10 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: core-platform-backstage
+  description: This developer portal itself (Phase 26) - registers every module/service/app in catalog/system.yaml as a real Backstage entity.
+spec:
+  type: website
+  owner: platform
+  lifecycle: experimental
+  system: core-platform

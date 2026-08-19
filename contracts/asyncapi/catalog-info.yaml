@@ -1,0 +1,358 @@
+apiVersion: backstage.io/v1alpha1
+kind: API
+metadata:
+  name: core-platform-events
+  description: Domain events published to the outbox table and relayed to subscribers - only modules that actually call outbox.Record are represented here (see the spec's own header for which).
+spec:
+  type: asyncapi
+  lifecycle: experimental
+  owner: platform
+  system: core-platform
+  definition: |
+    asyncapi: 3.0.0
+    info:
+      title: Core Platform Events
+      version: 1.0.0
+    channels:
+      userCreated:
+        address: user.created.v1
+        messages:
+          userCreated:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: user.created }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, displayName, status]
+                  properties:
+                    id: { type: string }
+                    displayName: { type: string }
+                    status: { type: string, enum: [active, deactivated, deleted] }
+      userUpdated:
+        address: user.updated.v1
+        messages:
+          userUpdated:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: user.updated }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, displayName, status]
+                  properties:
+                    id: { type: string }
+                    displayName: { type: string }
+                    status: { type: string, enum: [active, deactivated, deleted] }
+      userDeactivated:
+        address: user.deactivated.v1
+        messages:
+          userDeactivated:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: user.deactivated }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, displayName, status]
+                  properties:
+                    id: { type: string }
+                    displayName: { type: string }
+                    status: { type: string, enum: [active, deactivated, deleted] }
+      userDeleted:
+        address: user.deleted.v1
+        messages:
+          userDeleted:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: user.deleted }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, displayName, status]
+                  properties:
+                    id: { type: string }
+                    displayName: { type: string }
+                    status: { type: string, enum: [active, deactivated, deleted] }
+      applicationCreated:
+        address: application.created.v1
+        messages:
+          applicationCreated:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: application.created }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, slug, name, status]
+                  properties:
+                    id: { type: string }
+                    slug: { type: string }
+                    name: { type: string }
+                    status: { type: string, enum: [active, inactive, archived] }
+      applicationUpdated:
+        address: application.updated.v1
+        messages:
+          applicationUpdated:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: application.updated }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, slug, name, status]
+                  properties:
+                    id: { type: string }
+                    slug: { type: string }
+                    name: { type: string }
+                    status: { type: string, enum: [active, inactive, archived] }
+      relationshipCreated:
+        address: relationship.created.v1
+        messages:
+          relationshipCreated:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: relationship.created }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, requesterUserId, targetUserId, type, status]
+                  properties:
+                    id: { type: string }
+                    requesterUserId: { type: string }
+                    targetUserId: { type: string }
+                    type: { type: string, description: "Product-defined relationship type (e.g. 'friend', 'follow') - never a fixed platform concept." }
+                    status: { type: string, enum: [pending, active, blocked, ended] }
+      messageSent:
+        address: message.sent.v1
+        messages:
+          messageSent:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: message.sent }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, conversationId, senderId, type]
+                  properties:
+                    id: { type: string }
+                    conversationId: { type: string }
+                    senderId: { type: string }
+                    type: { type: string, description: "Product-defined message type (e.g. 'TEXT', 'IMAGE', 'STICKER') - extensible, never a fixed platform enum." }
+      notificationRequested:
+        address: notification.requested.v1
+        messages:
+          notificationRequested:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: notification.requested }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, userId, category, channels]
+                  properties:
+                    id: { type: string }
+                    userId: { type: string }
+                    category: { type: string, description: "Product-defined notification category (e.g. 'message', 'friend_request') - never a fixed platform concept." }
+                    channels: { type: array, items: { type: string, enum: [push, email, sms, in_app, realtime] } }
+      notificationSent:
+        address: notification.sent.v1
+        messages:
+          notificationSent:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: notification.sent }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data: { $ref: '#/components/schemas/notificationDeliveryOutcome' }
+      notificationDelivered:
+        address: notification.delivered.v1
+        messages:
+          notificationDelivered:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: notification.delivered }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data: { $ref: '#/components/schemas/notificationDeliveryOutcome' }
+      notificationFailed:
+        address: notification.failed.v1
+        messages:
+          notificationFailed:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: notification.failed }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data: { $ref: '#/components/schemas/notificationDeliveryOutcome' }
+      fileUploaded:
+        address: file.uploaded.v1
+        messages:
+          fileUploaded:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: file.uploaded }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data:
+                  type: object
+                  required: [id, appId, ownerUserId, mimeType, byteSize]
+                  properties:
+                    id: { type: string }
+                    appId: { type: string }
+                    ownerUserId: { type: string }
+                    mimeType: { type: string }
+                    byteSize: { type: integer }
+      configUpdated:
+        address: config.updated.v1
+        messages:
+          configUpdated:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: config.updated }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data: { $ref: '#/components/schemas/configChangeRef' }
+      configDeleted:
+        address: config.deleted.v1
+        messages:
+          configDeleted:
+            payload:
+              type: object
+              required: [id, type, version, source, occurredAt, data]
+              properties:
+                id: { type: string }
+                type: { const: config.deleted }
+                version: { const: 1 }
+                source: { type: string }
+                occurredAt: { type: string, format: date-time }
+                data: { $ref: '#/components/schemas/configChangeRef' }
+    components:
+      schemas:
+        configChangeRef:
+          type: object
+          required: [appId, environment, key]
+          properties:
+            appId: { type: string }
+            environment: { type: string }
+            key: { type: string }
+            changedBy: { type: string }
+        notificationDeliveryOutcome:
+          type: object
+          required: [deliveryId, notificationId, channel, status]
+          properties:
+            deliveryId: { type: string }
+            notificationId: { type: string }
+            channel: { type: string, enum: [push, email, sms, in_app, realtime] }
+            status: { type: string, enum: [pending, sent, delivered, failed, deferred, skipped] }
+    operations:
+      publishUserCreated:
+        action: send
+        channel: { $ref: '#/channels/userCreated' }
+      publishRelationshipCreated:
+        action: send
+        channel: { $ref: '#/channels/relationshipCreated' }
+      publishUserUpdated:
+        action: send
+        channel: { $ref: '#/channels/userUpdated' }
+      publishUserDeactivated:
+        action: send
+        channel: { $ref: '#/channels/userDeactivated' }
+      publishUserDeleted:
+        action: send
+        channel: { $ref: '#/channels/userDeleted' }
+      publishApplicationCreated:
+        action: send
+        channel: { $ref: '#/channels/applicationCreated' }
+      publishApplicationUpdated:
+        action: send
+        channel: { $ref: '#/channels/applicationUpdated' }
+      publishMessageSent:
+        action: send
+        channel: { $ref: '#/channels/messageSent' }
+      publishNotificationRequested:
+        action: send
+        channel: { $ref: '#/channels/notificationRequested' }
+      publishNotificationSent:
+        action: send
+        channel: { $ref: '#/channels/notificationSent' }
+      publishNotificationDelivered:
+        action: send
+        channel: { $ref: '#/channels/notificationDelivered' }
+      publishNotificationFailed:
+        action: send
+        channel: { $ref: '#/channels/notificationFailed' }
+      publishFileUploaded:
+        action: send
+        channel: { $ref: '#/channels/fileUploaded' }
+      publishConfigUpdated:
+        action: send
+        channel: { $ref: '#/channels/configUpdated' }
+      publishConfigDeleted:
+        action: send
+        channel: { $ref: '#/channels/configDeleted' }

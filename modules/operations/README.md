@@ -1,3 +1,5 @@
 # Operations module
 
-Owns the **operations** capability boundary. Product applications consume this module through contracts/SDKs, never by reaching into its data store.
+Owns the **operations** capability boundary - the foundation every other module is built on, which is why it's the one module with no dependencies of its own in this taxonomy.
+
+Implemented in `packages/go/platformkit` (Phase 1) - config loading, structured logging, a shared error taxonomy, `/livez`/`/readyz`/`/healthz` health checks, correlation IDs propagated end-to-end, OpenTelemetry wiring, and graceful shutdown, imported by all three Go services (`core-api`, `realtime-gateway`, `worker`). `backend/worker` is this module's other half operationally - the generic background-execution service (job runner, search indexer, analytics pipeline, Temporal workflow worker) that `events-workflows` and several other domain modules depend on to do anything outside an HTTP request/response cycle. The observability stack itself (OTel Collector, Tempo, Prometheus, Grafana, Loki - see the control-room dashboard's "Infra & Credentials" sheet) is this module's runtime surface, completed further in Phase 28.

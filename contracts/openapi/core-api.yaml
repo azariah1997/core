@@ -461,6 +461,1672 @@ paths:
       responses:
         '200': { description: The identity resolved from the bearer token, content: { application/json: { schema: { $ref: '#/components/schemas/Identity' } } } }
         '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  # ------------------------------------------------------------------
+  # Everything below is generated directly from each module's real
+  # mux.Handle(...) registrations and their handlers' actual
+  # http.Status* calls (see scripts/gen-openapi-paths.py) - not
+  # hand-written. Path, method, path params, auth requirement, and
+  # success status code are exactly what the server does. Request/
+  # response bodies use a generic object schema rather than a fully
+  # hand-typed one; see each module's own README for exact shapes.
+  # ------------------------------------------------------------------
+  /analytics/events:
+    get:
+      operationId: analyticsListRecent
+      description: "Analytics (Phase 23) - generic event envelope ingestion. analytics_events is a landing buffer, never queried for analytics."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      operationId: analyticsTrack
+      description: "Analytics (Phase 23) - generic event envelope ingestion. analytics_events is a landing buffer, never queried for analytics."
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+  /ai/completions:
+    post:
+      operationId: aigatewayComplete
+      description: "AI Gateway (Phase 24) - provider-neutral completions API; products never call an AI vendor directly."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ai/usage:
+    get:
+      operationId: aigatewayListUsage
+      description: "AI Gateway (Phase 24) - provider-neutral completions API; products never call an AI vendor directly."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /ai/models:
+    get:
+      operationId: aigatewayListModels
+      description: "AI Gateway (Phase 24) - provider-neutral completions API; products never call an AI vendor directly."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /audit:
+    post:
+      operationId: auditRecord
+      description: "Audit (Phase 19) - the central, immutable audit trail. Immutable by omission (no update/delete route) and by a DB trigger."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: auditList
+      description: "Audit (Phase 19) - the central, immutable audit trail. Immutable by omission (no update/delete route) and by a DB trigger."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /audit/{id}:
+    get:
+      operationId: auditGet
+      description: "Audit (Phase 19) - the central, immutable audit trail. Immutable by omission (no update/delete route) and by a DB trigger."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /authz/roles:
+    get:
+      operationId: authzListRoles
+      description: "Authorization (Phase 6, HTTP surface added Phase 25) - RBAC role management. Can(subject, action, resource) itself has no HTTP surface; it's called in-process by every other module."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      operationId: authzAssignRole
+      description: "Authorization (Phase 6, HTTP surface added Phase 25) - RBAC role management. Can(subject, action, resource) itself has no HTTP surface; it's called in-process by every other module."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /authz/roles/revoke:
+    post:
+      operationId: authzRevokeRole
+      description: "Authorization (Phase 6, HTTP surface added Phase 25) - RBAC role management. Can(subject, action, resource) itself has no HTTP surface; it's called in-process by every other module."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /billing/entitlements:
+    get:
+      operationId: billingListEntitlements
+      description: "Billing / Entitlements (Phase 22) - Entitlement (platform truth) kept separate from Payment (provider transaction record)."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      operationId: billingGrantEntitlement
+      description: "Billing / Entitlements (Phase 22) - Entitlement (platform truth) kept separate from Payment (provider transaction record)."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /billing/entitlements/check/{key}:
+    get:
+      operationId: billingCheckEntitlement
+      description: "Billing / Entitlements (Phase 22) - Entitlement (platform truth) kept separate from Payment (provider transaction record)."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /billing/entitlements/{id}/revoke:
+    post:
+      operationId: billingRevokeEntitlement
+      description: "Billing / Entitlements (Phase 22) - Entitlement (platform truth) kept separate from Payment (provider transaction record)."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /billing/payments:
+    get:
+      operationId: billingListPayments
+      description: "Billing / Entitlements (Phase 22) - Entitlement (platform truth) kept separate from Payment (provider transaction record)."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /billing/webhooks/{provider}:
+    post:
+      operationId: billingWebhook
+      description: "Billing / Entitlements (Phase 22) - Entitlement (platform truth) kept separate from Payment (provider transaction record)."
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Success, no content }
+  /features:
+    post:
+      operationId: featuresCreateFeature
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: featuresListFeatures
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /features/{appId}/{key}:
+    get:
+      operationId: featuresGetFeature
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    patch:
+      operationId: featuresUpdateFeature
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /features/{appId}/{key}/evaluate:
+    post:
+      operationId: featuresEvaluate
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /features/{appId}/{key}/rules:
+    post:
+      operationId: featuresCreateRule
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: featuresListRules
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /features/{appId}/{key}/rules/{ruleId}:
+    patch:
+      operationId: featuresUpdateRule
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+        - { name: ruleId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      operationId: featuresDeleteRule
+      description: "Feature Flags (Phase 17) - Feature/FeatureRule/FeatureEvaluation with deterministic percentage-rollout bucketing."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+        - { name: ruleId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /files:
+    post:
+      operationId: filesRequestUpload
+      description: "File / Media Platform (Phase 13) - presigned upload/download against real MinIO/S3, real MD5 checksum verification."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: filesListMine
+      description: "File / Media Platform (Phase 13) - presigned upload/download against real MinIO/S3, real MD5 checksum verification."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /files/purge-expired:
+    post:
+      operationId: filesPurgeExpired
+      description: "File / Media Platform (Phase 13) - presigned upload/download against real MinIO/S3, real MD5 checksum verification."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /files/{id}/confirm:
+    post:
+      operationId: filesConfirmUpload
+      description: "File / Media Platform (Phase 13) - presigned upload/download against real MinIO/S3, real MD5 checksum verification."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /files/{id}:
+    get:
+      operationId: filesGet
+      description: "File / Media Platform (Phase 13) - presigned upload/download against real MinIO/S3, real MD5 checksum verification."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      operationId: filesDelete
+      description: "File / Media Platform (Phase 13) - presigned upload/download against real MinIO/S3, real MD5 checksum verification."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /files/{id}/download:
+    get:
+      operationId: filesGetDownloadURL
+      description: "File / Media Platform (Phase 13) - presigned upload/download against real MinIO/S3, real MD5 checksum verification."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /jobs:
+    post:
+      operationId: jobsEnqueue
+      description: "Background Jobs (Phase 15) - immediate/scheduled/delayed/recurring, with retry and dead-letter handling, executed by worker."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: jobsListMine
+      description: "Background Jobs (Phase 15) - immediate/scheduled/delayed/recurring, with retry and dead-letter handling, executed by worker."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /jobs/{id}:
+    get:
+      operationId: jobsGet
+      description: "Background Jobs (Phase 15) - immediate/scheduled/delayed/recurring, with retry and dead-letter handling, executed by worker."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /jobs/{id}/attempts:
+    get:
+      operationId: jobsListAttempts
+      description: "Background Jobs (Phase 15) - immediate/scheduled/delayed/recurring, with retry and dead-letter handling, executed by worker."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /privacy/consent:
+    post:
+      operationId: privacySetConsent
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: privacyListConsent
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /privacy/preferences:
+    get:
+      operationId: privacyGetPreferences
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    put:
+      operationId: privacySetPreferences
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /privacy/retention-policies:
+    post:
+      operationId: privacyCreateRetentionPolicy
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: privacyListRetentionPolicies
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /privacy/export:
+    post:
+      operationId: privacyRequestExport
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /privacy/export/{id}:
+    get:
+      operationId: privacyGetExport
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /privacy/export/{id}/download:
+    get:
+      operationId: privacyDownloadExport
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /privacy/delete:
+    post:
+      operationId: privacyRequestDeletion
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /privacy/delete/{id}:
+    get:
+      operationId: privacyGetDeletion
+      description: "Privacy (Phase 20) - consent, preferences, retention policy, and cross-module data export/deletion."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations:
+    post:
+      operationId: messagingCreateConversation
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: messagingListMine
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}:
+    get:
+      operationId: messagingGetConversation
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/members:
+    get:
+      operationId: messagingListMembers
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    post:
+      operationId: messagingAddMember
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/members/{userId}:
+    delete:
+      operationId: messagingRemoveMember
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/messages:
+    post:
+      operationId: messagingSendMessage
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: messagingListMessages
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/messages/{messageId}:
+    get:
+      operationId: messagingGetMessage
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/messages/{messageId}/delivered:
+    post:
+      operationId: messagingMarkDelivered
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/read:
+    put:
+      operationId: messagingSetReadState
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/read/{userId}:
+    get:
+      operationId: messagingGetReadState
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/messages/{messageId}/reactions:
+    post:
+      operationId: messagingAddReaction
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: messagingListReactions
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /conversations/{id}/messages/{messageId}/reactions/{type}:
+    delete:
+      operationId: messagingRemoveReaction
+      description: "Messaging (Phase 11) - Conversation/Message/Delivery/ReadState/Reaction/Attachment, real-time delivery via realtime-gateway."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: messageId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: type, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /notifications:
+    post:
+      operationId: notificationsSend
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: notificationsListMine
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /notifications/{id}:
+    get:
+      operationId: notificationsGet
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /notifications/{id}/deliveries:
+    get:
+      operationId: notificationsListDeliveries
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /notifications/{id}/deliveries/{deliveryId}/retry:
+    post:
+      operationId: notificationsRetryDelivery
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: deliveryId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /notification-preferences:
+    get:
+      operationId: notificationsGetPreferences
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    put:
+      operationId: notificationsSetPreference
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /notification-preferences/quiet-hours:
+    get:
+      operationId: notificationsGetQuietHours
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    put:
+      operationId: notificationsSetQuietHours
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /notification-templates:
+    post:
+      operationId: notificationsCreateTemplate
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /notification-templates/{appId}/{key}:
+    get:
+      operationId: notificationsGetTemplate
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    patch:
+      operationId: notificationsUpdateTemplate
+      description: "Notification Platform (Phase 12) - Notification/Template/Preference/Delivery across 5 channels."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /search:
+    get:
+      operationId: searchQuery
+      description: "Search Platform (Phase 14) - SearchDocument/SearchProvider over OpenSearch, kept in sync by worker's event-driven indexer."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /search/index:
+    post:
+      operationId: searchIndex
+      description: "Search Platform (Phase 14) - SearchDocument/SearchProvider over OpenSearch, kept in sync by worker's event-driven indexer."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /search/index/{type}/{id}:
+    delete:
+      operationId: searchDelete
+      description: "Search Platform (Phase 14) - SearchDocument/SearchProvider over OpenSearch, kept in sync by worker's event-driven indexer."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: type, in: path, required: true, schema: { type: string } }
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /config:
+    get:
+      operationId: remoteconfigList
+      description: "Remote Configuration (Phase 18) - typed key/value store scoped by (AppID, Environment, Key), with a full change-audit trail."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /config/{appId}/{environment}/{key}:
+    put:
+      operationId: remoteconfigSet
+      description: "Remote Configuration (Phase 18) - typed key/value store scoped by (AppID, Environment, Key), with a full change-audit trail."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: environment, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: remoteconfigGet
+      description: "Remote Configuration (Phase 18) - typed key/value store scoped by (AppID, Environment, Key), with a full change-audit trail."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: environment, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      operationId: remoteconfigDelete
+      description: "Remote Configuration (Phase 18) - typed key/value store scoped by (AppID, Environment, Key), with a full change-audit trail."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: environment, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /config/{appId}/{environment}/{key}/history:
+    get:
+      operationId: remoteconfigHistory
+      description: "Remote Configuration (Phase 18) - typed key/value store scoped by (AppID, Environment, Key), with a full change-audit trail."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: appId, in: path, required: true, schema: { type: string } }
+        - { name: environment, in: path, required: true, schema: { type: string } }
+        - { name: key, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /workflows:
+    post:
+      operationId: workflowsStart
+      description: "Workflows (Phase 16) - a deliberately narrow Core Workflow API (Start/Describe/Signal only) over a real Temporal cluster."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /workflows/{id}:
+    get:
+      operationId: workflowsGet
+      description: "Workflows (Phase 16) - a deliberately narrow Core Workflow API (Start/Describe/Signal only) over a real Temporal cluster."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /workflows/{id}/signal:
+    post:
+      operationId: workflowsSignal
+      description: "Workflows (Phase 16) - a deliberately narrow Core Workflow API (Start/Describe/Signal only) over a real Temporal cluster."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/mutes:
+    post:
+      operationId: trustsafetyMute
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: trustsafetyListMutes
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/mutes/{userId}:
+    delete:
+      operationId: trustsafetyUnmute
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '204': { description: Success, no content }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/reports:
+    post:
+      operationId: trustsafetyCreateReport
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/reports/{id}:
+    get:
+      operationId: trustsafetyGetReport
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/cases:
+    get:
+      operationId: trustsafetyListCases
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/cases/{id}:
+    get:
+      operationId: trustsafetyGetCase
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    patch:
+      operationId: trustsafetyResolveCase
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/cases/{id}/reports:
+    get:
+      operationId: trustsafetyListCaseReports
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/cases/{id}/assign:
+    patch:
+      operationId: trustsafetyAssignCase
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/suspensions:
+    post:
+      operationId: trustsafetySuspend
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: trustsafetyListSuspensions
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/suspensions/{id}/lift:
+    post:
+      operationId: trustsafetyLiftSuspension
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/bans:
+    post:
+      operationId: trustsafetyBan
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: trustsafetyListBans
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/bans/{id}/lift:
+    post:
+      operationId: trustsafetyLiftBan
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/appeals:
+    post:
+      operationId: trustsafetyCreateAppeal
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: trustsafetyListAppeals
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/appeals/{id}/review:
+    post:
+      operationId: trustsafetyReviewAppeal
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /trustsafety/signals:
+    post:
+      operationId: trustsafetyRecordSignal
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    get:
+      operationId: trustsafetyListSignals
+      description: "Trust & Safety (Phase 21) - Mute/Report->ModerationCase/Suspension/Ban/Appeal. Block reuses relationships, not duplicated."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  /users:
+    get:
+      operationId: usersList
+      description: "Users (Phase 4; admin-wide listing added Phase 25) - the platform person/account, separate from Identity."
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+        '401': { description: Missing, malformed or invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
 components:
   securitySchemes:
     bearerAuth:
@@ -595,7 +2261,7 @@ components:
         id: { type: string, format: uuid }
         groupId: { type: string, format: uuid }
         userId: { type: string, format: uuid }
-        role: { type: string, description: Product-defined free-form label (e.g. "parent", "leader", "officer") - purely descriptive, never used for authorization. }
+        role: { type: string, description: "Product-defined free-form label (e.g. 'parent', 'leader', 'officer') - purely descriptive, never used for authorization." }
         isManager: { type: boolean, description: The one structural permission bit - independent of role. }
         createdAt: { type: string, format: date-time }
     AddGroupMember:
@@ -619,7 +2285,7 @@ components:
         appId: { type: string, format: uuid }
         requesterUserId: { type: string, format: uuid }
         targetUserId: { type: string, format: uuid }
-        type: { type: string, description: Product-defined (e.g. "friend", "follow", "partner") - never a fixed platform concept. }
+        type: { type: string, description: "Product-defined (e.g. 'friend', 'follow', 'partner') - never a fixed platform concept." }
         status: { type: string, enum: [pending, active, blocked, ended] }
         metadata: { type: object, additionalProperties: true }
         createdAt: { type: string, format: date-time }
