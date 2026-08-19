@@ -72,14 +72,15 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "24 / 30", "80%"),
+    ("Phases complete", "25 / 30", "83%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
+    ("Frontend apps", "1", "apps/admin (Next.js 15 App Router)"),
     ("Shared Go packages", "1", "packages/go/platformkit"),
-    ("Domain modules (core-api)", "24", "one per completed phase"),
-    ("Live HTTP endpoints", "142", "see 'API Endpoints' sheet"),
+    ("Domain modules (core-api)", "24", "one per completed backend phase"),
+    ("Live HTTP endpoints", "146", "see 'API Endpoints' sheet"),
     ("DB migrations", "22", "data/migrations/0001-0022"),
     ("Real infra dependencies", "10", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, Ollama, OTel"),
-    ("Commits so far", "32", "see git log"),
+    ("Commits so far", "34", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -138,8 +139,8 @@ roadmap_rows = [
     (22, "Done", "Billing / Entitlements", "Entitlement (platform truth, HasEntitlement) kept separate from Payment (provider transaction record). PaymentProvider abstraction + registry; billing/stripe implements Stripe's real webhook HMAC signature scheme, live-validated without a Stripe account via self-signed test payloads. Apple IAP/Google Play deliberately deferred - no sandbox credentials available.", "8fcc87f"),
     (23, "Done", "Analytics", "Generic event envelope, matching the roadmap's own field names verbatim. analytics_events is a landing buffer, never queried for analytics - a new worker pipeline batches unflushed rows as NDJSON into MinIO/S3 (a real data-lake landing pattern). Track is this platform's one open, unauthenticated write endpoint, IP-rate-limited instead of Bearer-gated.", "aa207ae"),
     (24, "Done", "AI Gateway", "Provider-neutral interface; real local inference via a new Ollama container (auto-pulled model, no vendor API key) - the one live-testable provider. Model routing, quotas (ratelimit reused again), real token/cost tracking, a genuine audit.Record per call, prompt/version metadata, timeouts, fallback. OpenAI/Anthropic/Google structurally supported, not implemented (no real credentials).", "d7324b9"),
-    (25, "Next up", "Admin Portal", "The control-plane UI (apps/admin, Next.js) - visibility into apps/users/sessions/devices/roles/tenants/relationships/messages/notifications/files/jobs/flags/config/moderation/audit/health/deployments, always through service APIs, never direct DB queries.", "-"),
-    (26, "Pending", "Backstage", "Integrate Backstage as the developer portal - every service/module exposes metadata (owner, lifecycle, repo, docs, dependencies, APIs, events, DB ownership, dashboards, runbooks). Backstage becomes the map of the platform.", "-"),
+    (25, "Done", "Admin Portal", "The control-plane UI (apps/admin, Next.js 15 App Router), always through service APIs, never direct DB queries - real Keycloak-authenticated session, live data on Users/Roles/Applications/Audit/Moderation/Feature Flags/Jobs/Configuration/System Health/Billing/AI Gateway, honest ComingSoon reasoning for every area whose backend endpoint is still self-scoped-only. Added authz's first HTTP surface and GET /v1/users (admin-wide listing) to close real gaps. Live-validated end to end with a real headless browser: login, dashboard, a full role grant/revoke round trip, logout.", "97091a7"),
+    (26, "Next up", "Backstage", "Integrate Backstage as the developer portal - every service/module exposes metadata (owner, lifecycle, repo, docs, dependencies, APIs, events, DB ownership, dashboards, runbooks). Backstage becomes the map of the platform.", "-"),
     (27, "Pending", "SDKs", "Flutter SDK, TypeScript SDK, Go SDK - auth, token refresh, API calls, errors, pagination, safe retries, realtime connection, correlation IDs, device registration. Future products talk to Core primarily through these.", "-"),
     (28, "Pending", "Observability Completion", "Every production component gets structured logs, metrics, traces, health checks, dashboards, alerts. Standard dashboards for API latency, error rate, req/sec, DB connections, Kafka lag, WS connections, Redis latency, notification/job failures.", "-"),
     (29, "Pending", "Platform Control Plane", "One view of applications/services/versions/environments/dependencies/deployments/DB ownership/events/API contracts/health/alerts/recent changes - every module discoverable from one place.", "-"),
@@ -180,7 +181,7 @@ for n, name in [
     (11, "Messaging"), (12, "Notification Platform"), (13, "File / Media Platform"),
     (14, "Search Platform"), (15, "Background Jobs"), (16, "Workflows"), (17, "Feature Flags"),
     (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"), (21, "Trust & Safety"),
-    (22, "Billing / Entitlements"), (23, "Analytics"), (24, "AI Gateway"),
+    (22, "Billing / Entitlements"), (23, "Analytics"), (24, "AI Gateway"), (25, "Admin Portal"),
 ]:
     done(n, f"Phase {n}: {name} implemented, unit-tested, live-validated, documented, committed")
 
@@ -236,9 +237,18 @@ done(24, "AI Gateway: prompt/version metadata (free-form PromptKey/PromptVersion
 done(24, "AI Gateway: timeouts (context.WithTimeout per provider call)")
 done(24, "AI Gateway: fallback (ordered provider/model chain, first success wins)")
 pending(24, "AI Gateway: live token-quantity quota (as opposed to today's call-count quota)", "Deferred - Repository already has the data (Completion.TotalTokens); not wired as a live gate yet")
+done(25, "Admin Portal: real Keycloak-authenticated session (Resource Owner Password Credentials grant), httpOnly session cookie")
+done(25, "Admin Portal: visibility - Applications", "Real GET /v1/apps table")
+done(25, "Admin Portal: visibility - Users (list + detail)", "New admin-wide GET /v1/users (cursor-paginated, platform.admin-gated)")
+done(25, "Admin Portal: visibility - Roles/Permissions", "New authz HTTP surface (GET/POST /v1/authz/roles, POST /v1/authz/roles/revoke) with a full grant/revoke UI")
+done(25, "Admin Portal: visibility - Feature Flags, Configuration, Jobs")
+done(25, "Admin Portal: visibility - Moderation, Audit")
+done(25, "Admin Portal: visibility - System Health", "Live GET /healthz against core-api/realtime-gateway/worker")
+done(25, "Admin Portal: visibility - Billing, AI Gateway usage (bonus, not roadmap-named)")
+pending(25, "Admin Portal: visibility - Sessions/Devices, Tenants, Relationships, Messages, Notifications, Files", "Deferred - each backing module only exposes a listMine-style self-scoped endpoint, not an admin-wide one; honest ComingSoon reasoning shown per area instead of fake rows")
+pending(25, "Admin Portal: visibility - Deployments", "Deferred to Phase 29 - nothing in the platform tracks deployments as data yet")
 
 for n, name, items in [
-    (25, "Admin Portal", ["control-plane UI in apps/admin", "visibility: Applications", "visibility: Users/Sessions/Devices", "visibility: Roles/Permissions", "visibility: Tenants/Relationships", "visibility: Messages/Notifications", "visibility: Files/Jobs", "visibility: Feature flags/Configuration", "visibility: Moderation/Audit", "visibility: System health/Deployments", "must go through service APIs, never direct DB queries"]),
     (26, "Backstage", ["integrate Backstage as developer portal", "per-module metadata: name/description/owner/lifecycle", "per-module metadata: repository/documentation/dependencies", "per-module metadata: APIs/events/DB ownership/dashboards/runbooks"]),
     (27, "SDKs", ["Flutter SDK", "TypeScript SDK", "Go SDK", "auth + token refresh in each SDK", "pagination + safe retries", "realtime connection helper", "correlation ID propagation", "device registration helper"]),
     (28, "Observability Completion", ["structured logs everywhere", "metrics everywhere", "distributed traces everywhere", "health checks everywhere", "dashboard: API latency", "dashboard: error rate", "dashboard: requests/sec", "dashboard: DB connections", "dashboard: Kafka lag", "dashboard: WebSocket connections", "dashboard: Redis latency", "dashboard: notification failures", "dashboard: background job failures", "alerting rules"]),
@@ -324,6 +334,10 @@ endpoint_rows = [
     E("GET", "/v1/users/me", "users", "Authenticated (self)", ""),
     E("PATCH", "/v1/users/me", "users", "Authenticated (self)", ""),
     E("GET", "/v1/users/{id}", "users", "Self or platform.admin", ""),
+    E("GET", "/v1/users", "users", "platform.admin", "Phase 25: cursor-paginated admin-wide listing, new to close a real Admin Portal gap"),
+    E("GET", "/v1/authz/roles", "authz", "Self or platform.admin", "Phase 25: authz's first-ever HTTP surface"),
+    E("POST", "/v1/authz/roles", "authz", "platform.admin", "assign a role to a user"),
+    E("POST", "/v1/authz/roles/revoke", "authz", "platform.admin", "revoke a role from a user"),
     E("GET", "/v1/users/me/devices", "devices", "Authenticated (self)", ""),
     E("POST", "/v1/users/me/devices", "devices", "Authenticated (self)", "register/upsert"),
     E("DELETE", "/v1/users/me/devices/{id}", "devices", "Authenticated (self)", "soft-revoke"),
@@ -477,13 +491,14 @@ test_rows = [
     ("9", "Mint a real login token", "curl -s -X POST http://localhost:8081/realms/core/protocol/openid-connect/token -d grant_type=password -d client_id=core-platform -d username=demo -d password=demo | python3 -c \"import sys,json;print(json.load(sys.stdin)['access_token'])\"", "The realm ships one seeded user, 'demo' / 'demo'. Save the output as $TOKEN - it's a real JWT good for 300 seconds."),
     ("10", "Call an authenticated endpoint", "curl -s http://localhost:8080/v1/users/me -H \"Authorization: Bearer $TOKEN\"", "First call auto-provisions a platform User linked to the Keycloak identity. Re-run it - you get back the same user."),
     ("11", "Create a second, non-admin test user", "Use Keycloak's Admin API (admin/admin against the master realm) to POST a user to /admin/realms/core/users - see the Audit phase's live validation for the exact curl sequence.", "Needed for anything that checks cross-user permissions (403-for-a-stranger tests)."),
-    ("12", "Grant platform.admin to a user", "There is no HTTP route for this by design (it's a privileged, rarely-needed action) - write a small throwaway Go program under backend/core-api/cmd/<name>/main.go that constructs authz.Service the same way cmd/server/main.go does and calls AssignRole, then delete it.", "This is the same pattern used to verify every admin-gated module during development - see any phase's entry in VALIDATION.md for a worked example."),
+    ("12", "Grant platform.admin to a user", "curl -s -X POST http://localhost:8080/v1/authz/roles -H \"Authorization: Bearer $TOKEN\" -H 'Content-Type: application/json' -d '{\"userId\":\"<id>\",\"role\":\"platform.admin\"}'", "Phase 25 gave authz a real HTTP surface - $TOKEN's own user must already be platform.admin (the seeded 'demo' user is, in this environment). Also doable from the Admin Portal's Users -> role management UI. The very first admin in a brand-new environment still needs a one-time throwaway Go program (AssignRole has no caller-privilege check at the service layer, only at HTTP) - the same bootstrap problem every real RBAC system has."),
     ("13", "Exercise a module end-to-end", "e.g. POST /v1/apps, then GET /v1/apps, then GET /v1/apps/{id} with the returned id", "Pick any row from the 'API Endpoints' sheet and try it - every route takes/returns plain JSON. Look at each module's own README.md (backend/core-api/internal/<module>/README.md) for the exact request/response shapes and the scoping decisions behind them."),
     ("14", "Watch a WebSocket live", "wscat -c \"ws://localhost:8090/ws?access_token=$TOKEN\" (or any RFC6455 client)", "You should receive a {\"type\":\"connected\",...} frame immediately. Subscribe to a channel, then publish from a second connection to see fan-out."),
     ("15", "Watch the database directly", "docker exec -it docker-postgres-1 psql -U core -d core", "Useful for sanity-checking: SELECT * FROM outbox_events ORDER BY id DESC LIMIT 20; or SELECT * FROM audit_events ORDER BY occurred_at DESC LIMIT 20;"),
     ("16", "Read the validation history", "VALIDATION.md (repo root)", "Every phase's actual live-validation pass is written up there in detail - exact curl sequences, real bugs found and fixed, and what was deliberately left out of scope."),
     ("17", "Run the smoke test", "make smoke", "A scripted end-to-end pass (scripts/smoke.sh) against the real running services - the fastest single command to confirm the whole stack still works after a change."),
     ("18", "Skip the curl entirely", "Open this dashboard's API Console tab", "Pick an endpoint, fetch a token via the built-in Keycloak password-grant form (or paste one you already have), and send the request - the real response comes back right in the page. core-api's CORS middleware (internal/api/cors.go) is what makes this possible; it must be running a build from Phase 21 or later."),
+    ("19", "Run the actual Admin Portal", "cd apps/admin && npm install && npm run dev", "Then open http://localhost:3000 and sign in with demo/demo. Real UI over real data (Phase 25) - Users, Roles, Audit, Moderation, Feature Flags, Jobs, Configuration, System Health, Billing, AI Gateway. Needs core-api (and ideally realtime-gateway/worker) already running per steps 5-7."),
 ]
 ws6 = add_sheet(
     "How To Test",
@@ -498,6 +513,7 @@ ws6 = add_sheet(
 # ---------------------------------------------------------------------------
 infra_rows = [
     ("core-api", "Go service", "http://localhost:8080", "The main platform API - almost every module in this workbook lives here.", "n/a"),
+    ("admin (apps/admin)", "Next.js app", "http://localhost:3000", "The Admin Portal (Phase 25) - real UI over core-api, session-based auth via Keycloak.", "sign in with demo/demo (same as core realm)"),
     ("realtime-gateway", "Go service", "ws://localhost:8090", "WebSocket connections, presence, channel fan-out.", "n/a"),
     ("worker", "Go service", "http://localhost:8091 (health only)", "Background job runner, search indexer, Temporal workflow worker, analytics NDJSON pipeline.", "n/a"),
     ("Postgres", "Docker container", "localhost:5432", "System of record for every domain module.", "core / core, db 'core'"),
