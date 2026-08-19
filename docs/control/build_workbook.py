@@ -72,17 +72,17 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "27 / 30", "90%"),
+    ("Phases complete", "28 / 30", "93%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
     ("Frontend apps", "1", "apps/admin (Next.js 15 App Router)"),
     ("Developer portal", "1", "platform/backstage (real @backstage/create-app, 27-entity catalog)"),
     ("Client SDKs", "3", "Go, TypeScript, Dart - packages/go/coresdk, packages/typescript/core-sdk, packages/flutter/core_sdk"),
-    ("Shared Go packages", "1", "packages/go/platformkit"),
+    ("Shared Go packages", "2", "packages/go/platformkit, packages/go/coresdk"),
     ("Domain modules (core-api)", "24", "one per completed backend phase"),
-    ("Live HTTP endpoints", "146", "see 'API Endpoints' sheet"),
+    ("Live HTTP endpoints", "147", "see 'API Endpoints' sheet"),
     ("DB migrations", "22", "data/migrations/0001-0022"),
-    ("Real infra dependencies", "10", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, Ollama, OTel"),
-    ("Commits so far", "38", "see git log"),
+    ("Real infra dependencies", "10", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, Ollama, OTel/Prometheus/Grafana/Loki/Tempo"),
+    ("Commits so far", "40", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -144,8 +144,8 @@ roadmap_rows = [
     (25, "Done", "Admin Portal", "The control-plane UI (apps/admin, Next.js 15 App Router), always through service APIs, never direct DB queries - real Keycloak-authenticated session, live data on Users/Roles/Applications/Audit/Moderation/Feature Flags/Jobs/Configuration/System Health/Billing/AI Gateway, honest ComingSoon reasoning for every area whose backend endpoint is still self-scoped-only. Added authz's first HTTP surface and GET /v1/users (admin-wide listing) to close real gaps. Live-validated end to end with a real headless browser: login, dashboard, a full role grant/revoke round trip, logout.", "97091a7"),
     (26, "Done", "Backstage", "A real @backstage/create-app instance (platform/backstage) whose catalog (catalog/system.yaml) is 24 real entities - a Group, the System, Components for all 3 services + admin + 16 domain modules with real dependsOn/providesApis, and 2 API entities embedding the full real OpenAPI/AsyncAPI specs. Filled in 11 stub module READMEs, fixed 2 real YAML bugs in the OpenAPI spec, generated ~110 missing OpenAPI paths from the actual Go route registrations, and live-validated the whole catalog loads with zero processing errors via the real catalog API.", "b1bf7b9"),
     (27, "Done", "SDKs", "Go (packages/go/coresdk), TypeScript (packages/typescript/core-sdk), and Dart (packages/flutter/core_sdk) - auth/token refresh, typed API calls, errors, pagination, GET-only retries, a real realtime WebSocket client, device registration, in all three. Each proven by a real consumer: apps/admin migrated its entire API layer to the TS SDK; apps/mobile's login/profile flow uses the Dart SDK (and closed a real Phase 9 gap - make flutter-test now passes). 39 unit tests total, all against real local HTTP servers, plus live validation against real Keycloak/core-api/realtime-gateway for all three.", "12b9046"),
-    (28, "Next up", "Observability Completion", "Every production component gets structured logs, metrics, traces, health checks, dashboards, alerts. Standard dashboards for API latency, error rate, req/sec, DB connections, Kafka lag, WS connections, Redis latency, notification/job failures.", "-"),
-    (29, "Pending", "Platform Control Plane", "One view of applications/services/versions/environments/dependencies/deployments/DB ownership/events/API contracts/health/alerts/recent changes - every module discoverable from one place.", "-"),
+    (28, "Done", "Observability Completion", "New packages/go/platformkit/metrics gives every service a real /metrics endpoint and all 8 named dashboards real backing data (Kafka lag excluded - no real producer/consumer exists yet, an honest placeholder panel instead). logging.NewWithLoki ships structured logs directly to Loki's push API with real trace_id correlation. Grafana provisioning (previously mounted nowhere) now auto-loads Prometheus/Tempo/Loki datasources and a real dashboard; alerts.yml adds 6 live-evaluated Prometheus alerting rules. A real regression (broken WebSocket Hijack) was caught by the metrics middleware's own tests before ever reaching a running service.", "697ea4c"),
+    (29, "Next up", "Platform Control Plane", "One view of applications/services/versions/environments/dependencies/deployments/DB ownership/events/API contracts/health/alerts/recent changes - every module discoverable from one place.", "-"),
     (30, "Pending", "AI Development Context", "Machine-readable context for AI agents - every module carries README, ownership metadata, dependencies, API contract, event contracts, DB ownership, so an agent (like this one) can safely work on any part of the platform.", "-"),
 ]
 ws2 = add_sheet(
@@ -184,7 +184,7 @@ for n, name in [
     (14, "Search Platform"), (15, "Background Jobs"), (16, "Workflows"), (17, "Feature Flags"),
     (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"), (21, "Trust & Safety"),
     (22, "Billing / Entitlements"), (23, "Analytics"), (24, "AI Gateway"), (25, "Admin Portal"),
-    (26, "Backstage"), (27, "SDKs"),
+    (26, "Backstage"), (27, "SDKs"), (28, "Observability Completion"),
 ]:
     done(n, f"Phase {n}: {name} implemented, unit-tested, live-validated, documented, committed")
 
@@ -269,9 +269,24 @@ done(27, "SDKs: correlation ID propagation", "X-Correlation-ID on every call, ma
 done(27, "SDKs: device registration helper", "DevicesRegister/devicesRegister in all three - realtime dial requires a real registered device id")
 done(27, "SDKs: apps/mobile test/ directory (make flutter-test currently fails)", "Closed as a side effect - real widget tests added, discovered and worked around Flutter's TestWidgetsFlutterBinding network-mocking constraint live. Was pending since Phase 9.")
 pending(27, "SDKs: full API coverage (all 146 endpoints typed) in each SDK", "Deferred - each SDK covers a representative 'core identity' slice (platform/identity/users/devices/applications) plus what its real consumer needs; the untyped request()/Do() escape hatch reaches everything else. Broader coverage is real, additive work, not a framework limitation.")
+done(28, "Observability: structured logs everywhere", "logging.NewWithLoki ships every record to Loki's real push API directly; on by default locally (LOKI_PUSH_URL)")
+done(28, "Observability: metrics everywhere", "New packages/go/platformkit/metrics - real GET /metrics (Prometheus exposition) on core-api, realtime-gateway, and worker")
+done(28, "Observability: distributed traces everywhere", "Already real since Phase 1 (otelx) - confirmed still working live this phase")
+done(28, "Observability: health checks everywhere", "Already real since Phase 1 (/livez /readyz /healthz) - confirmed still working live this phase")
+done(28, "Observability: dashboard - API latency", "http_request_duration_seconds, labeled by route pattern (not raw path) to keep cardinality bounded")
+done(28, "Observability: dashboard - error rate", "http_requests_total{status=~\"5..\"} / http_requests_total")
+done(28, "Observability: dashboard - requests/sec", "rate(http_requests_total[5m])")
+done(28, "Observability: dashboard - DB connections", "db_pool_connections, real pgxpool.Stat() polled on a ticker (pg.ReportStats) on all 3 services")
+pending(28, "Observability: dashboard - Kafka lag", "Deliberately not implemented - no real Kafka/Redpanda producer or consumer exists in this codebase yet (documented since Phase 14); an honest placeholder panel explains this instead of a fabricated metric")
+done(28, "Observability: dashboard - WebSocket connections", "realtime_ws_connections, live-validated going 0 -> 1 -> 0 across a real connect/hold/disconnect cycle against the running service")
+done(28, "Observability: dashboard - Redis latency", "redis_command_duration_seconds via a real go-redis v9 Hook, InstrumentRedis")
+done(28, "Observability: dashboard - notification failures", "notification_delivery_failures_total, incremented at notifications.Service.dispatch's two real failure paths")
+done(28, "Observability: dashboard - background job failures", "job_failures_total, incremented only on jobrunner's real dead_letter transition (not every retryable attempt)")
+done(28, "Observability: alerting rules", "6 real, live-evaluated Prometheus rules (infra/observability/alerts.yml) - ServiceDown live-confirmed firing then clearing on the real service lifecycle")
+pending(28, "Observability: Alertmanager routing (Slack/PagerDuty/email)", "Deferred - no real notification-channel credentials in this environment, the same reasoning Stripe/AI vendor adapters have documented; Prometheus's own rule evaluation and API are real regardless")
+pending(28, "Observability: per-service (not shared) Grafana dashboards", "Deferred - one shared 'Core Platform Overview' dashboard covers all 3 services today, not 9 separate roadmap-named dashboards")
 
 for n, name, items in [
-    (28, "Observability Completion", ["structured logs everywhere", "metrics everywhere", "distributed traces everywhere", "health checks everywhere", "dashboard: API latency", "dashboard: error rate", "dashboard: requests/sec", "dashboard: DB connections", "dashboard: Kafka lag", "dashboard: WebSocket connections", "dashboard: Redis latency", "dashboard: notification failures", "dashboard: background job failures", "alerting rules"]),
     (29, "Platform Control Plane", ["one view: applications/services/versions", "one view: environments/dependencies/deployments", "one view: DB ownership/events/API contracts", "one view: health/alerts/recent changes"]),
     (30, "AI Development Context", ["every module: README", "every module: ownership metadata", "every module: dependencies", "every module: API contract", "every module: event contracts", "every module: DB ownership"]),
 ]:
@@ -345,6 +360,7 @@ endpoint_rows = [
     E("GET", "/livez", "platform", "Open", "process alive"),
     E("GET", "/readyz", "platform", "Open", "dependencies ready"),
     E("GET", "/healthz", "platform", "Open", "aggregated health"),
+    E("GET", "/metrics", "platform", "Open", "Prometheus exposition (Phase 28) - real on core-api, realtime-gateway, and worker"),
     E("GET", "/v1/platform", "platform", "Open", "platform name/env/version"),
     E("POST", "/v1/apps", "applications", "Open (this phase's scope)", ""),
     E("GET", "/v1/apps", "applications", "Open", "cursor-paginated list"),
@@ -523,6 +539,7 @@ test_rows = [
     ("21", "Test the Go SDK", "cd packages/go/coresdk && go test ./...", "12 unit tests against a real httptest.Server (Phase 27) - no mocking library."),
     ("22", "Test the TypeScript SDK", "cd packages/typescript/core-sdk && npm install && npm test", "13 unit tests against a real node:http server. make sdk-ts-build must run before apps/admin can resolve @core-platform/sdk - make admin-install/admin-build already depend on it."),
     ("23", "Test the Dart SDK", "cd packages/flutter/core_sdk && dart pub get && dart test", "13 unit tests against a real dart:io HttpServer. apps/mobile depends on this package via a path: dependency in its pubspec.yaml."),
+    ("24", "Look at real dashboards, metrics, logs, traces, and alerts", "Open http://localhost:3000 (admin/admin) -> Core Platform folder -> Core Platform Overview", "Needs core-api/realtime-gateway/worker actually running (steps 5-7). Every panel is real data (Phase 28) - API latency, error rate, requests/sec, DB connections, WebSocket connections, Redis latency, notification/job failures. Prometheus alerts: http://localhost:9090/alerts. Loki/Tempo: query via Grafana's Explore tab."),
 ]
 ws6 = add_sheet(
     "How To Test",
@@ -550,7 +567,11 @@ infra_rows = [
     ("Temporal", "Docker container", "localhost:7233", "Durable workflow execution engine behind the workflows module.", "no auth locally"),
     ("Kafka / Redpanda", "Docker container", "localhost:9092", "Health-checked today; no producer wired yet (outbox-to-Kafka relay is a documented future gap).", "no auth locally"),
     ("Ollama", "Docker container", "http://localhost:11434", "Real local LLM inference behind the AI Gateway - model qwen2.5:0.5b auto-pulled on every start, no vendor API key needed.", "no auth locally"),
-    ("OTel Collector / Tempo / Prometheus / Grafana / Loki", "Docker containers", "see infra/docker/docker-compose.yml", "Full observability stack - traces, metrics, logs, dashboards.", "no auth locally"),
+    ("Prometheus", "Docker container", "http://localhost:9090", "Scrapes a real GET /metrics on core-api/realtime-gateway/worker (Phase 28) and evaluates alerts.yml's 6 real alerting rules - api/v1/targets and api/v1/rules are both genuinely populated, not just running empty.", "no auth locally"),
+    ("Grafana", "Docker container", "http://localhost:3000", "Provisioned (Phase 28) - Prometheus/Tempo/Loki datasources and the real 'Core Platform Overview' dashboard auto-load on container start, previously mounted nowhere.", "admin/admin"),
+    ("Loki", "Docker container", "http://localhost:3100", "Receives structured logs pushed directly by logging.NewWithLoki (Phase 28) - no log-shipping agent, since these services run as bare host processes Promtail-style container-log-tailing would never see.", "no auth locally"),
+    ("Tempo", "Docker container", "http://localhost:3200", "Receives real traces via otel-collector (Phase 1).", "no auth locally"),
+    ("OTel Collector", "Docker container", "http://localhost:4318 (OTLP/HTTP)", "Traces only - relays to Tempo. Logs bypass it entirely (Loki's native push API instead); no metrics pipeline (Prometheus scrapes services directly).", "no auth locally"),
 ]
 ws7 = add_sheet(
     "Infra & Credentials",
