@@ -72,14 +72,14 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "22 / 30", "73%"),
+    ("Phases complete", "23 / 30", "77%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
     ("Shared Go packages", "1", "packages/go/platformkit"),
-    ("Domain modules (core-api)", "22", "one per completed phase"),
-    ("Live HTTP endpoints", "137", "see 'API Endpoints' sheet"),
-    ("DB migrations", "20", "data/migrations/0001-0020"),
+    ("Domain modules (core-api)", "23", "one per completed phase"),
+    ("Live HTTP endpoints", "139", "see 'API Endpoints' sheet"),
+    ("DB migrations", "21", "data/migrations/0001-0021"),
     ("Real infra dependencies", "9", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, OTel"),
-    ("Commits so far", "28", "see git log"),
+    ("Commits so far", "30", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -136,8 +136,8 @@ roadmap_rows = [
     (20, "Done", "Privacy", "Consent (append-only), preferences, retention policy, and cross-module ExportUserData/DeleteUserData via an Exporter/Deleter registry (users/devices/files/audit-export-only). Coordinated by a Temporal workflow core-api runs its own embedded worker for, since worker (separate module) can't reach core-api's internal packages.", "44299b2"),
     (21, "Done", "Trust & Safety", "Mute/Report->ModerationCase (deduplicated)/Suspension/Ban/Appeal - Block reuses Phase 8's relationships, not duplicated. A new requireActive middleware makes Suspension/Ban actually restrict access platform-wide from one place. New shared ratelimit package (Valkey-backed) gates report spam; a critical AbuseSignal auto-opens a case.", "7af4c58"),
     (22, "Done", "Billing / Entitlements", "Entitlement (platform truth, HasEntitlement) kept separate from Payment (provider transaction record). PaymentProvider abstraction + registry; billing/stripe implements Stripe's real webhook HMAC signature scheme, live-validated without a Stripe account via self-signed test payloads. Apple IAP/Google Play deliberately deferred - no sandbox credentials available.", "8fcc87f"),
-    (23, "Next up", "Analytics", "Generic analytics event envelope (event_name/user_id/anonymous_id/app_id/session_id/timestamp/properties/context). Operational DBs must not become analytics DBs - pipeline foundation for ClickHouse/warehouse/data lake.", "-"),
-    (24, "Pending", "AI Gateway", "Provider-neutral interface (OpenAI/Anthropic/Google/local models/Ollama/vLLM) with model routing, quotas, token/cost tracking, audit, timeouts, fallback. Products never call AI vendors directly.", "-"),
+    (23, "Done", "Analytics", "Generic event envelope, matching the roadmap's own field names verbatim. analytics_events is a landing buffer, never queried for analytics - a new worker pipeline batches unflushed rows as NDJSON into MinIO/S3 (a real data-lake landing pattern). Track is this platform's one open, unauthenticated write endpoint, IP-rate-limited instead of Bearer-gated.", "aa207ae"),
+    (24, "Next up", "AI Gateway", "Provider-neutral interface (OpenAI/Anthropic/Google/local models/Ollama/vLLM) with model routing, quotas, token/cost tracking, audit, timeouts, fallback. Products never call AI vendors directly.", "-"),
     (25, "Pending", "Admin Portal", "The control-plane UI (apps/admin, Next.js) - visibility into apps/users/sessions/devices/roles/tenants/relationships/messages/notifications/files/jobs/flags/config/moderation/audit/health/deployments, always through service APIs, never direct DB queries.", "-"),
     (26, "Pending", "Backstage", "Integrate Backstage as the developer portal - every service/module exposes metadata (owner, lifecycle, repo, docs, dependencies, APIs, events, DB ownership, dashboards, runbooks). Backstage becomes the map of the platform.", "-"),
     (27, "Pending", "SDKs", "Flutter SDK, TypeScript SDK, Go SDK - auth, token refresh, API calls, errors, pagination, safe retries, realtime connection, correlation IDs, device registration. Future products talk to Core primarily through these.", "-"),
@@ -180,7 +180,7 @@ for n, name in [
     (11, "Messaging"), (12, "Notification Platform"), (13, "File / Media Platform"),
     (14, "Search Platform"), (15, "Background Jobs"), (16, "Workflows"), (17, "Feature Flags"),
     (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"), (21, "Trust & Safety"),
-    (22, "Billing / Entitlements"),
+    (22, "Billing / Entitlements"), (23, "Analytics"),
 ]:
     done(n, f"Phase {n}: {name} implemented, unit-tested, live-validated, documented, committed")
 
@@ -218,9 +218,12 @@ done(22, "Billing: provider abstraction (PaymentProvider interface + registry, i
 done(22, "Billing: Stripe adapter", "Real HMAC-SHA256 webhook signature verification, live-validated without a Stripe account via self-signed test payloads")
 pending(22, "Billing: Apple IAP adapter", "Deferred - needs real App Store Server API credentials this environment doesn't have")
 pending(22, "Billing: Google Play adapter", "Deferred - needs real Play Developer API credentials this environment doesn't have")
+done(23, "Analytics: generic event envelope (event_name/user_id/anonymous_id/app_id/session_id/timestamp/properties/context)")
+done(23, "Analytics: keep operational DBs out of the analytics path (analytics_events is a landing buffer, never queried for analytics)")
+done(23, "Analytics: pipeline foundation for ClickHouse/warehouse/data lake (worker batches NDJSON into MinIO/S3)")
+pending(23, "Analytics: an actual ClickHouse/warehouse/data-lake query layer", "Out of scope - this phase builds the landing pipeline only; no real destination system exists in this environment to integrate against honestly")
 
 for n, name, items in [
-    (23, "Analytics", ["generic analytics event envelope (event_name/user_id/anonymous_id/app_id/session_id/timestamp/properties/context)", "keep operational DBs out of the analytics path", "pipeline foundation for ClickHouse/warehouse/data lake"]),
     (24, "AI Gateway", ["provider-neutral interface (OpenAI/Anthropic/Google/local/Ollama/vLLM)", "model routing", "quotas", "token usage tracking", "cost tracking", "audit integration", "prompt/version metadata", "timeouts", "fallback"]),
     (25, "Admin Portal", ["control-plane UI in apps/admin", "visibility: Applications", "visibility: Users/Sessions/Devices", "visibility: Roles/Permissions", "visibility: Tenants/Relationships", "visibility: Messages/Notifications", "visibility: Files/Jobs", "visibility: Feature flags/Configuration", "visibility: Moderation/Audit", "visibility: System health/Deployments", "must go through service APIs, never direct DB queries"]),
     (26, "Backstage", ["integrate Backstage as developer portal", "per-module metadata: name/description/owner/lifecycle", "per-module metadata: repository/documentation/dependencies", "per-module metadata: APIs/events/DB ownership/dashboards/runbooks"]),
@@ -275,6 +278,8 @@ module_rows = [
     ("trustsafety", "core-api", "Mute/Report/ModerationCase/Suspension/Ban/Appeal/AbuseSignal - Block reuses Phase 8's relationships", "mutes, moderation_cases, reports, suspensions, bans, appeals, abuse_signals", "Self for own mutes/appeals; moderator-or-admin for case/suspension/ban management", "Phase 21"),
     ("billing", "core-api", "Entitlement (platform truth) kept separate from Payment (provider transaction record); PaymentProvider abstraction + registry", "entitlements, payments", "Self for own entitlements/payments; platform.admin for manual grants", "Phase 22"),
     ("billing/stripe", "core-api", "Real Stripe webhook HMAC-SHA256 signature verification - the one live-testable PaymentProvider this phase ships", "none (stateless verification)", "n/a (provider-signature-authenticated, not a Bearer route)", "Phase 22"),
+    ("analytics", "core-api", "Generic event envelope ingestion; analytics_events is a landing buffer, never a query surface", "analytics_events", "Open (IP-rate-limited) to track; platform.admin-only debug listing", "Phase 23"),
+    ("worker: analyticspipeline", "worker", "Claims unflushed events, batches as NDJSON, writes to MinIO/S3 - the ClickHouse/warehouse/data-lake landing pattern", "reads/writes analytics_events; writes MinIO/S3", "n/a (background)", "Phase 23"),
 ]
 ws4 = add_sheet(
     "Modules",
@@ -429,6 +434,8 @@ endpoint_rows = [
     E("POST", "/v1/billing/entitlements/{id}/revoke", "billing", "platform.admin", ""),
     E("GET", "/v1/billing/payments", "billing", "Self or platform.admin", "?userId="),
     E("POST", "/v1/billing/webhooks/{provider}", "billing", "Provider webhook signature (no Bearer token)", "the one route on this platform with no requireUser/requireActive"),
+    E("POST", "/v1/analytics/events", "analytics", "Open (IP-rate-limited, no Bearer token)", "the platform's one deliberately unauthenticated write endpoint"),
+    E("GET", "/v1/analytics/events", "analytics", "platform.admin", "operational debug view only, not for analytical queries"),
 ]
 ws5 = add_sheet(
     "API Endpoints",
