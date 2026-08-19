@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/example/core-platform/backend/core-api/internal/aigateway"
 	"github.com/example/core-platform/backend/core-api/internal/analytics"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
 	"github.com/example/core-platform/backend/core-api/internal/audit"
@@ -34,7 +35,7 @@ import (
 
 const serviceName = "core-api"
 
-func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Service, usersSvc *users.Service, devicesSvc *devices.Service, authzSvc *authz.Service, tenantsSvc *tenants.Service, relationshipsSvc *relationships.Service, groupsSvc *groups.Service, messagingSvc *messaging.Service, notificationsSvc *notifications.Service, filesSvc *files.Service, searchSvc *search.Service, jobsSvc *jobs.Service, workflowsSvc *workflows.Service, featuresSvc *features.Service, remoteConfigSvc *remoteconfig.Service, auditSvc *audit.Service, privacySvc *privacy.Service, trustSafetySvc *trustsafety.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service) http.Handler {
+func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Service, usersSvc *users.Service, devicesSvc *devices.Service, authzSvc *authz.Service, tenantsSvc *tenants.Service, relationshipsSvc *relationships.Service, groupsSvc *groups.Service, messagingSvc *messaging.Service, notificationsSvc *notifications.Service, filesSvc *files.Service, searchSvc *search.Service, jobsSvc *jobs.Service, workflowsSvc *workflows.Service, featuresSvc *features.Service, remoteConfigSvc *remoteconfig.Service, auditSvc *audit.Service, privacySvc *privacy.Service, trustSafetySvc *trustsafety.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, aiGatewaySvc *aigateway.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /livez", health.Live(serviceName))
@@ -74,6 +75,7 @@ func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Se
 	// protected by IP-based rate limiting instead. See
 	// analytics/http.go's RegisterTrackRoute and analytics/README.md.
 	analytics.RegisterTrackRoute(mux, analyticsSvc)
+	aigateway.RegisterRoutes(mux, aiGatewaySvc, requireActive(identitySvc, usersSvc, trustSafetySvc))
 
 	mux.HandleFunc("GET /v1/platform", func(w http.ResponseWriter, r *http.Request) {
 		httpx.JSON(w, 200, map[string]any{"name": cfg.PlatformName, "environment": cfg.Env, "apiVersion": "v1"})

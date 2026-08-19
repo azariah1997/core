@@ -31,6 +31,7 @@ type Config struct {
 
 	OpenSearchURL string
 	OtelEndpoint  string
+	OllamaURL     string
 
 	JWTIssuer   string
 	JWTAudience string
@@ -68,6 +69,7 @@ func Load() Config {
 
 		OpenSearchURL: env("OPENSEARCH_URL", "http://localhost:9200"),
 		OtelEndpoint:  env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
+		OllamaURL:     env("OLLAMA_URL", "http://localhost:11434"),
 
 		JWTIssuer:   env("JWT_ISSUER", "http://localhost:8081/realms/core"),
 		JWTAudience: env("JWT_AUDIENCE", "core-platform"),

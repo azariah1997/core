@@ -76,6 +76,18 @@ services:
       OPENSEARCH_INITIAL_ADMIN_PASSWORD: "CorePlatform!Local1"
     ports: ["9200:9200"]
 
+  # Phase 24's one genuinely live-testable AI provider: local inference,
+  # no API key needed, matching the roadmap's own "local models, Ollama"
+  # provider option. Pulling the (small, ~400MB) model on every start is
+  # the same self-healing bootstrap precedent as Keycloak's realm import
+  # and OpenFGA's store creation - `ollama pull` is a fast no-op once
+  # the model is already cached in the named volume below.
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: ["ollamadata:/root/.ollama"]
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 3 && ollama pull qwen2.5:0.5b; wait"]
+
   prometheus:
     image: prom/prometheus:v3.5.0
     volumes: ["../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
@@ -111,3 +123,4 @@ volumes:
   valkeydata: {}
   miniodata: {}
   grafanadata: {}
+  ollamadata: {}

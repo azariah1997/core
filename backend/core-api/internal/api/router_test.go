@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/example/core-platform/backend/core-api/internal/aigateway"
+	aigatewaymemory "github.com/example/core-platform/backend/core-api/internal/aigateway/memory"
 	"github.com/example/core-platform/backend/core-api/internal/analytics"
 	analyticsmemory "github.com/example/core-platform/backend/core-api/internal/analytics/memory"
 	"github.com/example/core-platform/backend/core-api/internal/applications"
@@ -162,6 +164,7 @@ func newTestHandler() http.Handler {
 	trustSafetySvc := trustsafety.NewService(trustsafetymemory.New(), authzSvc, noopRateLimiter{})
 	billingSvc := billing.NewService(billingmemory.New(), authzSvc)
 	analyticsSvc := analytics.NewService(analyticsmemory.New(), authzSvc, noopRateLimiter{})
+	aiGatewaySvc := aigateway.NewService(aigatewaymemory.New(), authzSvc, noopRateLimiter{}, NewAIGatewayAuditRecorder(auditSvc))
 
 	return New(
 		config.Load(),
@@ -186,6 +189,7 @@ func newTestHandler() http.Handler {
 		trustSafetySvc,
 		billingSvc,
 		analyticsSvc,
+		aiGatewaySvc,
 	)
 }
 
@@ -416,6 +420,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 	trustSafetySvc := trustsafety.NewService(trustsafetymemory.New(), authzSvc, noopRateLimiter{})
 	billingSvc := billing.NewService(billingmemory.New(), authzSvc)
 	analyticsSvc := analytics.NewService(analyticsmemory.New(), authzSvc, noopRateLimiter{})
+	aiGatewaySvc := aigateway.NewService(aigatewaymemory.New(), authzSvc, noopRateLimiter{}, NewAIGatewayAuditRecorder(auditSvc))
 	handler := New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
@@ -439,6 +444,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		trustSafetySvc,
 		billingSvc,
 		analyticsSvc,
+		aiGatewaySvc,
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

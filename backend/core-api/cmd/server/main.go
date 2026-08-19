@@ -8,6 +8,9 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/example/core-platform/backend/core-api/internal/aigateway"
+	"github.com/example/core-platform/backend/core-api/internal/aigateway/ollama"
+	aigatewaypg "github.com/example/core-platform/backend/core-api/internal/aigateway/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/analytics"
 	analyticspg "github.com/example/core-platform/backend/core-api/internal/analytics/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/api"
@@ -239,7 +242,18 @@ func main() {
 	// downstream; see internal/analytics/README.md.
 	analyticsSvc := analytics.NewService(analyticspg.New(pool), authzSvc, ratelimit.New(redisClient))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc, trustSafetySvc, billingSvc, analyticsSvc))
+	// Phase 24: ollama.Provider is the one Provider this phase ships as
+	// genuinely live-testable (real local inference, no vendor API key)
+	// - see internal/aigateway/README.md for why OpenAI/Anthropic/Google
+	// adapters aren't registered here. "default" is the one model alias
+	// products call instead of naming "qwen2.5:0.5b" directly - that
+	// indirection is the literal mechanism behind "products must not
+	// call AI vendors directly."
+	aiGatewaySvc := aigateway.NewService(aigatewaypg.New(pool), authzSvc, ratelimit.New(redisClient), api.NewAIGatewayAuditRecorder(auditSvc))
+	aiGatewaySvc.RegisterProvider(ollama.New(ollama.Config{BaseURL: cfg.OllamaURL}))
+	aiGatewaySvc.RegisterRoute(aigateway.Route{Alias: "default", Steps: []aigateway.RouteStep{{Provider: "ollama", Model: "qwen2.5:0.5b"}}})
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc, trustSafetySvc, billingSvc, analyticsSvc, aiGatewaySvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {
