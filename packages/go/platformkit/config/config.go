@@ -32,6 +32,14 @@ type Config struct {
 	OpenSearchURL string
 	OtelEndpoint  string
 	OllamaURL     string
+	// LokiPushURL is Loki's own native push API
+	// (POST /loki/api/v1/push). Structured logs ship here directly
+	// (packages/go/platformkit/logging.NewWithLoki) - unlike traces,
+	// which route through otel-collector, log shipping doesn't need a
+	// collector hop since Loki accepts pushes natively. On by default
+	// locally (a real localhost address, like OtelEndpoint); empty
+	// disables shipping (stdout-only logging).
+	LokiPushURL string
 
 	JWTIssuer   string
 	JWTAudience string
@@ -70,6 +78,7 @@ func Load() Config {
 		OpenSearchURL: env("OPENSEARCH_URL", "http://localhost:9200"),
 		OtelEndpoint:  env("OTEL_EXPORTER_OTLP_ENDPOINT", "http://localhost:4318"),
 		OllamaURL:     env("OLLAMA_URL", "http://localhost:11434"),
+		LokiPushURL:   env("LOKI_PUSH_URL", "http://localhost:3100/loki/api/v1/push"),
 
 		JWTIssuer:   env("JWT_ISSUER", "http://localhost:8081/realms/core"),
 		JWTAudience: env("JWT_AUDIENCE", "core-platform"),

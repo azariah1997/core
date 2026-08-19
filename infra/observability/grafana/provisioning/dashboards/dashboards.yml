@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: core-platform
+    orgId: 1
+    folder: Core Platform
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards

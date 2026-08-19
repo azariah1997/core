@@ -1,0 +1,119 @@
+{
+  "title": "Core Platform Overview",
+  "uid": "core-platform-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "tags": ["core-platform", "phase-28"],
+  "panels": [
+    {
+      "id": 1,
+      "title": "API latency (p50 / p95 / p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "p50 {{service}}" },
+        { "expr": "histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "p95 {{service}}" },
+        { "expr": "histogram_quantile(0.99, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m])))", "legendFormat": "p99 {{service}}" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error rate (5xx / total)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (service) (rate(http_requests_total{status=~\"5..\"}[5m])) / sum by (service) (rate(http_requests_total[5m]))", "legendFormat": "{{service}}" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Requests / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum by (service) (rate(http_requests_total[5m]))", "legendFormat": "{{service}}" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "DB connections (core-api / worker pgxpool)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "db_pool_connections", "legendFormat": "{{service}} {{state}}" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "WebSocket connections (realtime-gateway)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "realtime_ws_connections", "legendFormat": "connections" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Valkey/Redis command latency (p99)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.99, sum by (le, command) (rate(redis_command_duration_seconds_bucket[5m])))", "legendFormat": "{{command}}" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Kafka lag - not applicable",
+      "type": "text",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "options": {
+        "mode": "markdown",
+        "content": "**No real Kafka/Redpanda producer or consumer exists in this codebase yet** (documented since Phase 14 - Redpanda is health-checked only; the outbox-to-Kafka relay is a named future gap). This panel is intentionally left as a placeholder rather than showing a fabricated metric with no real backing data - it becomes a real lag query the moment a real consumer group exists to measure."
+      }
+    },
+    {
+      "id": 8,
+      "title": "Notification delivery failures",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum by (channel) (rate(notification_delivery_failures_total[5m]))", "legendFormat": "{{channel}}" }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Background job failures",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "targets": [
+        { "expr": "sum by (type) (rate(job_failures_total[5m]))", "legendFormat": "{{type}}" }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {}
+      }
+    ]
+  }
+}

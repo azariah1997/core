@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -19,6 +20,7 @@ import (
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
 	"github.com/example/core-platform/packages/go/platformkit/pg"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
@@ -27,6 +29,15 @@ import (
 )
 
 const serviceName = "worker"
+
+// newLogger ships structured logs to Loki directly when LOKI_PUSH_URL
+// is configured - see platformkit/logging.NewWithLoki's own doc comment.
+func newLogger(cfg config.Config) *slog.Logger {
+	if cfg.LokiPushURL == "" {
+		return logging.New(serviceName, cfg.Env)
+	}
+	return logging.NewWithLoki(serviceName, cfg.Env, cfg.LokiPushURL)
+}
 
 // indexerPollInterval trades a little indexing latency (new documents
 // take up to this long to become searchable) for not hammering Postgres
@@ -50,7 +61,7 @@ const analyticsPollInterval = 10 * time.Second
 
 func main() {
 	cfg := config.Load()
-	logger := logging.New(serviceName, cfg.Env)
+	logger := newLogger(cfg)
 
 	if err := cfg.Validate(); err != nil {
 		logger.Error("invalid configuration", "error", err)
@@ -75,6 +86,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	defer pg.ReportStats(ctx, serviceName, pool, 10*time.Second)()
 
 	searchProvider, err := searchidx.NewOpenSearchProvider(ctx, searchidx.OpenSearchConfig{
 		Addresses: []string{cfg.OpenSearchURL}, Index: searchidx.DefaultIndex,
@@ -124,8 +136,9 @@ func main() {
 	mux.HandleFunc("GET /livez", health.Live(serviceName))
 	mux.HandleFunc("GET /readyz", health.Ready(dependencyChecks))
 	mux.HandleFunc("GET /healthz", health.Health(serviceName, dependencyChecks))
+	mux.Handle("GET /metrics", metrics.Handler())
 
-	handler := otelx.Wrap(serviceName, correlation.Middleware(mux))
+	handler := otelx.Wrap(serviceName, metrics.Middleware(serviceName, mux, correlation.Middleware(mux)))
 	srv := &http.Server{Addr: cfg.WorkerAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	stop := make(chan struct{})

@@ -90,7 +90,12 @@ services:
 
   prometheus:
     image: prom/prometheus:v3.5.0
-    volumes: ["../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+    # --web.enable-remote-write-receiver isn't needed - rule_files below
+    # is what makes the alerts in alerts.yml real and queryable at
+    # /api/v1/rules, not just static text nobody evaluates.
+    volumes:
+      - ../observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../observability/alerts.yml:/etc/prometheus/alerts.yml:ro
     ports: ["9090:9090"]
 
   grafana:
@@ -99,11 +104,15 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: admin
     ports: ["3000:3000"]
-    volumes: ["grafanadata:/var/lib/grafana"]
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ../observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../observability/grafana/dashboards:/etc/grafana/dashboards:ro
 
   loki:
     image: grafana/loki:3.5.3
-    command: -config.file=/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/config.yaml
+    volumes: ["../observability/loki.yaml:/etc/loki/config.yaml:ro"]
     ports: ["3100:3100"]
 
   tempo:

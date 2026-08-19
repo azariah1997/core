@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"text/template"
 	"time"
+
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 )
 
 const (
@@ -123,9 +125,10 @@ func (s *Service) Send(ctx context.Context, callerID string, in SendInput) (Noti
 func (s *Service) dispatch(ctx context.Context, n Notification, d NotificationDelivery) NotificationDelivery {
 	sender, ok := s.senders[d.Channel]
 	if !ok {
+		metrics.IncNotificationFailure(string(d.Channel))
 		updated, err := s.repo.UpdateDeliveryResult(ctx, d.ID, StatusFailed, "", "no sender configured for this channel")
 		if err != nil {
-			s.logger.Error("notifications: failed to record missing-sender failure", "error", err, "deliveryId", d.ID)
+			s.logger.ErrorContext(ctx, "notifications: failed to record missing-sender failure", "error", err, "deliveryId", d.ID)
 			return d
 		}
 		return updated
@@ -134,10 +137,11 @@ func (s *Service) dispatch(ctx context.Context, n Notification, d NotificationDe
 	status, errMsg := StatusSent, ""
 	if sendErr != nil {
 		status, errMsg = StatusFailed, sendErr.Error()
+		metrics.IncNotificationFailure(string(d.Channel))
 	}
 	updated, err := s.repo.UpdateDeliveryResult(ctx, d.ID, status, ref, errMsg)
 	if err != nil {
-		s.logger.Error("notifications: failed to record delivery result", "error", err, "deliveryId", d.ID)
+		s.logger.ErrorContext(ctx, "notifications: failed to record delivery result", "error", err, "deliveryId", d.ID)
 		return d
 	}
 	return updated

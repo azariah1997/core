@@ -15,6 +15,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 	"github.com/example/core-platform/packages/go/platformkit/rtbus"
 )
 
@@ -123,6 +124,10 @@ func (h *Hub) Register(c *Conn) {
 		if old, ok := devices[c.DeviceID]; ok {
 			close(old.Send)
 			delete(h.conns, old.ID)
+			// A same-user-same-device reconnect replaces one conns entry
+			// with another - net zero for the gauge, so this decrement is
+			// paired with the unconditional increment below, not a bug.
+			metrics.DecRealtimeConnections()
 		}
 	} else {
 		h.byUser[c.UserID] = map[string]*Conn{}
@@ -130,6 +135,7 @@ func (h *Hub) Register(c *Conn) {
 
 	h.conns[c.ID] = c
 	h.byUser[c.UserID][c.DeviceID] = c
+	metrics.IncRealtimeConnections()
 }
 
 // Unregister removes a connection and all its channel subscriptions.
@@ -137,6 +143,12 @@ func (h *Hub) Unregister(c *Conn) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	// A connection Register already replaced (see above) was removed
+	// from conns there, not here - guard against double-decrementing
+	// the gauge if its own goroutine still calls Unregister afterward.
+	if _, stillPresent := h.conns[c.ID]; stillPresent {
+		metrics.DecRealtimeConnections()
+	}
 	delete(h.conns, c.ID)
 	if devices, ok := h.byUser[c.UserID]; ok {
 		if devices[c.DeviceID] == c {

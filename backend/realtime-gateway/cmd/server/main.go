@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -17,12 +18,22 @@ import (
 	"github.com/example/core-platform/packages/go/platformkit/health"
 	"github.com/example/core-platform/packages/go/platformkit/jwtverify"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
 	"github.com/example/core-platform/packages/go/platformkit/pg"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
 )
 
 const serviceName = "realtime-gateway"
+
+// newLogger ships structured logs to Loki directly when LOKI_PUSH_URL
+// is configured - see platformkit/logging.NewWithLoki's own doc comment.
+func newLogger(cfg config.Config) *slog.Logger {
+	if cfg.LokiPushURL == "" {
+		return logging.New(serviceName, cfg.Env)
+	}
+	return logging.NewWithLoki(serviceName, cfg.Env, cfg.LokiPushURL)
+}
 
 // presenceTTL bounds how stale presence can get before a connection that
 // died without a clean close (crash, network partition) ages out - never
@@ -32,7 +43,7 @@ const presenceTTL = 45 * time.Second
 
 func main() {
 	cfg := config.Load()
-	logger := logging.New(serviceName, cfg.Env)
+	logger := newLogger(cfg)
 
 	if err := cfg.Validate(); err != nil {
 		logger.Error("invalid configuration", "error", err)
@@ -60,8 +71,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	defer pg.ReportStats(ctx, serviceName, pool, 10*time.Second)()
 
 	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	metrics.InstrumentRedis(redisClient)
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		logger.Error("failed to connect to redis/valkey", "error", err)
 		os.Exit(1)
@@ -89,9 +102,10 @@ func main() {
 	mux.HandleFunc("GET /livez", health.Live(serviceName))
 	mux.HandleFunc("GET /readyz", health.Ready(dependencyChecks))
 	mux.HandleFunc("GET /healthz", health.Health(serviceName, dependencyChecks))
+	mux.Handle("GET /metrics", metrics.Handler())
 	mux.Handle("GET /ws", wsAuthMiddleware(verifier, resolver)(ws.NewHandler(realtimeHub, presenceTracker, logger)))
 
-	handler := otelx.Wrap(serviceName, correlation.Middleware(mux))
+	handler := otelx.Wrap(serviceName, metrics.Middleware(serviceName, mux, correlation.Middleware(mux)))
 	srv := &http.Server{Addr: cfg.RealtimeAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

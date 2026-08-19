@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 	"time"
@@ -62,6 +63,7 @@ import (
 	workflowstemporal "github.com/example/core-platform/backend/core-api/internal/workflows/temporal"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
 	"github.com/example/core-platform/packages/go/platformkit/pg"
 	"github.com/example/core-platform/packages/go/platformkit/ratelimit"
@@ -72,9 +74,21 @@ import (
 
 const serviceName = "core-api"
 
+// newLogger ships structured logs to Loki directly (see
+// platformkit/logging.NewWithLoki's own doc comment for why not via
+// otel-collector) when LOKI_PUSH_URL is configured - on by default
+// locally, the same "empty disables it" convention otelx.Config.Endpoint
+// already uses for tracing.
+func newLogger(cfg config.Config) *slog.Logger {
+	if cfg.LokiPushURL == "" {
+		return logging.New(serviceName, cfg.Env)
+	}
+	return logging.NewWithLoki(serviceName, cfg.Env, cfg.LokiPushURL)
+}
+
 func main() {
 	cfg := config.Load()
-	logger := logging.New(serviceName, cfg.Env)
+	logger := newLogger(cfg)
 
 	if err := cfg.Validate(); err != nil {
 		logger.Error("invalid configuration", "error", err)
@@ -99,11 +113,13 @@ func main() {
 		os.Exit(1)
 	}
 	defer pool.Close()
+	defer pg.ReportStats(ctx, serviceName, pool, 10*time.Second)()
 
 	// core-api's first Redis client (Valkey was health-checked over TCP
 	// only until now): messaging needs it to push new messages to
 	// realtime-gateway's hub over the shared rtbus pub/sub contract.
 	redisClient := redis.NewClient(&redis.Options{Addr: cfg.RedisAddr})
+	metrics.InstrumentRedis(redisClient)
 	if err := redisClient.Ping(ctx).Err(); err != nil {
 		logger.Error("failed to connect to redis/valkey", "error", err)
 		os.Exit(1)

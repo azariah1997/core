@@ -31,6 +31,7 @@ import (
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
 	"github.com/example/core-platform/packages/go/platformkit/httpx"
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 )
 
 const serviceName = "core-api"
@@ -41,6 +42,7 @@ func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Se
 	mux.HandleFunc("GET /livez", health.Live(serviceName))
 	mux.HandleFunc("GET /readyz", health.Ready(dependencyChecks(cfg)))
 	mux.HandleFunc("GET /healthz", health.Health(serviceName, dependencyChecks(cfg)))
+	mux.Handle("GET /metrics", metrics.Handler())
 
 	applications.RegisterRoutes(mux, apps)
 	identity.RegisterRoutes(mux, identitySvc)
@@ -94,7 +96,7 @@ func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Se
 		apperr.Write(w, r, apperr.New(apperr.CodeNotFound, "resource not found"))
 	})
 
-	return corsMiddleware(correlation.Middleware(mux))
+	return metrics.Middleware(serviceName, mux, corsMiddleware(correlation.Middleware(mux)))
 }
 
 func dependencyChecks(cfg config.Config) health.Checks {

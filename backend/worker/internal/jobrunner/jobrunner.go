@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 )
 
 const batchSize = 10
@@ -179,6 +181,12 @@ func (r *Runner) recordResult(ctx context.Context, j claimedJob, execErr error, 
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit result tx: %w", err)
+	}
+	if execErr != nil && attemptNumber >= j.maxAttempts {
+		// Only a real, terminal dead-letter counts as a "job failure" for
+		// this metric - a retryable attempt failure (the default branch
+		// above) is expected, routine behavior, not an alertable one.
+		metrics.IncJobFailure(j.jobType)
 	}
 	return nil
 }

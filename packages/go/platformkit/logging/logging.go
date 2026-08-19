@@ -10,6 +10,9 @@ import (
 // environment, matching every downstream log line without callers needing
 // to repeat those fields.
 func New(service, env string) *slog.Logger {
-	handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
-	return slog.New(handler).With("service", service, "env", env)
+	return slog.New(newBaseHandler()).With("service", service, "env", env)
+}
+
+func newBaseHandler() slog.Handler {
+	return slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
 }

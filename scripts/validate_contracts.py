@@ -26,7 +26,24 @@ yaml_files = [
     'platform/backstage/catalog-info.yaml',
     'contracts/openapi/catalog-info.yaml',
     'contracts/asyncapi/catalog-info.yaml',
+    'infra/observability/prometheus.yml',
+    'infra/observability/alerts.yml',
+    'infra/observability/loki.yaml',
+    'infra/observability/grafana/provisioning/datasources/datasources.yml',
+    'infra/observability/grafana/provisioning/dashboards/dashboards.yml',
+    'infra/docker/docker-compose.yml',
 ]
+
+# The Grafana dashboard is JSON, not YAML - still a real parse check for
+# the same reason (Grafana's provisioner would reject invalid JSON the
+# same way, just with a less helpful error at container-start time).
+import json
+for f in ['infra/observability/grafana/dashboards/core-platform-overview.json']:
+    try:
+        json.loads((root/f).read_text())
+    except json.JSONDecodeError as e:
+        print(f'{f}: invalid JSON - {e}')
+        sys.exit(1)
 for f in yaml_files:
     try:
         list(yaml.safe_load_all((root/f).read_text()))

@@ -3,7 +3,12 @@ package hub_test
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"regexp"
+	"strconv"
 	"testing"
 	"time"
 
@@ -11,7 +16,33 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/example/core-platform/backend/realtime-gateway/internal/hub"
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 )
+
+// realtimeConnectionsGauge reads the real, current value of
+// realtime_ws_connections off metrics.Handler()'s actual exposition
+// output - the same package other services scrape in production,
+// rather than a second, parallel accessor that only exists for tests.
+func realtimeConnectionsGauge(t *testing.T) float64 {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body, err := io.ReadAll(rec.Body)
+	if err != nil {
+		t.Fatalf("read metrics body: %v", err)
+	}
+	// (?m)^...$ anchors to the actual metric line, not the "# HELP
+	// realtime_ws_connections Currently active..." comment line above it.
+	m := regexp.MustCompile(`(?m)^realtime_ws_connections (\S+)$`).FindSubmatch(body)
+	if m == nil {
+		t.Fatal("realtime_ws_connections not found in /metrics output")
+	}
+	v, err := strconv.ParseFloat(string(m[1]), 64)
+	if err != nil {
+		t.Fatalf("parse gauge value: %v", err)
+	}
+	return v
+}
 
 func newHub(t *testing.T) *hub.Hub {
 	t.Helper()
@@ -130,6 +161,42 @@ func TestPublishToDeviceDeliversToExactlyOneDevice(t *testing.T) {
 	case payload := <-phone.Send:
 		t.Fatalf("expected phone to receive nothing, got %s", payload)
 	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func TestRealtimeConnectionsGaugeStaysAccurateAcrossRegisterEvictUnregister(t *testing.T) {
+	// Delta-based, not an absolute assertion - realtime_ws_connections is
+	// process-wide shared state (promauto's usual singleton pattern), so
+	// other tests in this same binary may have already nudged it.
+	h := newHub(t)
+	before := realtimeConnectionsGauge(t)
+
+	first := &hub.Conn{ID: "gauge-first", UserID: "gauge-u1", DeviceID: "gauge-d1", Send: make(chan []byte, 4)}
+	h.Register(first)
+	if got, want := realtimeConnectionsGauge(t), before+1; got != want {
+		t.Fatalf("after one Register: got %v, want %v", got, want)
+	}
+
+	// A same-user-same-device reconnect evicts the old connection and
+	// registers a new one - net zero change, not +1 (which would mean
+	// the gauge silently drifts upward on every reconnect).
+	second := &hub.Conn{ID: "gauge-second", UserID: "gauge-u1", DeviceID: "gauge-d1", Send: make(chan []byte, 4)}
+	h.Register(second)
+	if got, want := realtimeConnectionsGauge(t), before+1; got != want {
+		t.Fatalf("after the evicting Register: got %v, want %v (eviction must be net zero)", got, want)
+	}
+
+	// The evicted connection's own goroutine calling Unregister afterward
+	// (as it really would, once it notices Send is closed) must not
+	// double-decrement - Register already accounted for the eviction.
+	h.Unregister(first)
+	if got, want := realtimeConnectionsGauge(t), before+1; got != want {
+		t.Fatalf("after Unregister(evicted first): got %v, want %v (must not double-decrement)", got, want)
+	}
+
+	h.Unregister(second)
+	if got, want := realtimeConnectionsGauge(t), before; got != want {
+		t.Fatalf("after Unregister(second): got %v, want %v", got, want)
 	}
 }
 

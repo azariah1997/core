@@ -1,0 +1,48 @@
+groups:
+  - name: core-platform
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 30s
+        labels: { severity: critical }
+        annotations:
+          summary: "{{ $labels.job }} is not responding to Prometheus scrapes"
+          description: "{{ $labels.job }} at {{ $labels.instance }} has been unreachable for 30s."
+
+      - alert: HighErrorRate
+        expr: sum by (service) (rate(http_requests_total{status=~"5.."}[5m])) / sum by (service) (rate(http_requests_total[5m])) > 0.05
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.service }} 5xx rate above 5%"
+          description: "{{ $labels.service }} has returned 5xx for more than 5% of requests over the last 5 minutes."
+
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, sum by (le, service) (rate(http_request_duration_seconds_bucket[5m]))) > 1
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.service }} p95 latency above 1s"
+          description: "{{ $labels.service }}'s 95th-percentile request duration has exceeded 1 second for 5 minutes."
+
+      - alert: DBPoolNearExhaustion
+        expr: db_pool_connections{state="acquired"} / db_pool_connections{state="max"} > 0.9
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "{{ $labels.service }} Postgres pool over 90% acquired"
+          description: "{{ $labels.service }} has held more than 90% of its pgxpool connections acquired for 2 minutes - requests may start queuing for a connection."
+
+      - alert: JobFailuresOccurring
+        expr: increase(job_failures_total[15m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Jobs of type {{ $labels.type }} are reaching dead_letter"
+          description: "At least one job of type {{ $labels.type }} exhausted its retries and moved to dead_letter in the last 15 minutes."
+
+      - alert: NotificationFailuresOccurring
+        expr: increase(notification_delivery_failures_total[15m]) > 0
+        labels: { severity: warning }
+        annotations:
+          summary: "Notification deliveries over {{ $labels.channel }} are failing"
+          description: "At least one notification delivery over {{ $labels.channel }} failed in the last 15 minutes."
