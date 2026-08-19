@@ -72,14 +72,14 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "23 / 30", "77%"),
+    ("Phases complete", "24 / 30", "80%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
     ("Shared Go packages", "1", "packages/go/platformkit"),
-    ("Domain modules (core-api)", "23", "one per completed phase"),
-    ("Live HTTP endpoints", "139", "see 'API Endpoints' sheet"),
-    ("DB migrations", "21", "data/migrations/0001-0021"),
-    ("Real infra dependencies", "9", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, OTel"),
-    ("Commits so far", "30", "see git log"),
+    ("Domain modules (core-api)", "24", "one per completed phase"),
+    ("Live HTTP endpoints", "142", "see 'API Endpoints' sheet"),
+    ("DB migrations", "22", "data/migrations/0001-0022"),
+    ("Real infra dependencies", "10", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, Ollama, OTel"),
+    ("Commits so far", "32", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -137,8 +137,8 @@ roadmap_rows = [
     (21, "Done", "Trust & Safety", "Mute/Report->ModerationCase (deduplicated)/Suspension/Ban/Appeal - Block reuses Phase 8's relationships, not duplicated. A new requireActive middleware makes Suspension/Ban actually restrict access platform-wide from one place. New shared ratelimit package (Valkey-backed) gates report spam; a critical AbuseSignal auto-opens a case.", "7af4c58"),
     (22, "Done", "Billing / Entitlements", "Entitlement (platform truth, HasEntitlement) kept separate from Payment (provider transaction record). PaymentProvider abstraction + registry; billing/stripe implements Stripe's real webhook HMAC signature scheme, live-validated without a Stripe account via self-signed test payloads. Apple IAP/Google Play deliberately deferred - no sandbox credentials available.", "8fcc87f"),
     (23, "Done", "Analytics", "Generic event envelope, matching the roadmap's own field names verbatim. analytics_events is a landing buffer, never queried for analytics - a new worker pipeline batches unflushed rows as NDJSON into MinIO/S3 (a real data-lake landing pattern). Track is this platform's one open, unauthenticated write endpoint, IP-rate-limited instead of Bearer-gated.", "aa207ae"),
-    (24, "Next up", "AI Gateway", "Provider-neutral interface (OpenAI/Anthropic/Google/local models/Ollama/vLLM) with model routing, quotas, token/cost tracking, audit, timeouts, fallback. Products never call AI vendors directly.", "-"),
-    (25, "Pending", "Admin Portal", "The control-plane UI (apps/admin, Next.js) - visibility into apps/users/sessions/devices/roles/tenants/relationships/messages/notifications/files/jobs/flags/config/moderation/audit/health/deployments, always through service APIs, never direct DB queries.", "-"),
+    (24, "Done", "AI Gateway", "Provider-neutral interface; real local inference via a new Ollama container (auto-pulled model, no vendor API key) - the one live-testable provider. Model routing, quotas (ratelimit reused again), real token/cost tracking, a genuine audit.Record per call, prompt/version metadata, timeouts, fallback. OpenAI/Anthropic/Google structurally supported, not implemented (no real credentials).", "d7324b9"),
+    (25, "Next up", "Admin Portal", "The control-plane UI (apps/admin, Next.js) - visibility into apps/users/sessions/devices/roles/tenants/relationships/messages/notifications/files/jobs/flags/config/moderation/audit/health/deployments, always through service APIs, never direct DB queries.", "-"),
     (26, "Pending", "Backstage", "Integrate Backstage as the developer portal - every service/module exposes metadata (owner, lifecycle, repo, docs, dependencies, APIs, events, DB ownership, dashboards, runbooks). Backstage becomes the map of the platform.", "-"),
     (27, "Pending", "SDKs", "Flutter SDK, TypeScript SDK, Go SDK - auth, token refresh, API calls, errors, pagination, safe retries, realtime connection, correlation IDs, device registration. Future products talk to Core primarily through these.", "-"),
     (28, "Pending", "Observability Completion", "Every production component gets structured logs, metrics, traces, health checks, dashboards, alerts. Standard dashboards for API latency, error rate, req/sec, DB connections, Kafka lag, WS connections, Redis latency, notification/job failures.", "-"),
@@ -180,7 +180,7 @@ for n, name in [
     (11, "Messaging"), (12, "Notification Platform"), (13, "File / Media Platform"),
     (14, "Search Platform"), (15, "Background Jobs"), (16, "Workflows"), (17, "Feature Flags"),
     (18, "Remote Configuration"), (19, "Audit"), (20, "Privacy"), (21, "Trust & Safety"),
-    (22, "Billing / Entitlements"), (23, "Analytics"),
+    (22, "Billing / Entitlements"), (23, "Analytics"), (24, "AI Gateway"),
 ]:
     done(n, f"Phase {n}: {name} implemented, unit-tested, live-validated, documented, committed")
 
@@ -222,9 +222,22 @@ done(23, "Analytics: generic event envelope (event_name/user_id/anonymous_id/app
 done(23, "Analytics: keep operational DBs out of the analytics path (analytics_events is a landing buffer, never queried for analytics)")
 done(23, "Analytics: pipeline foundation for ClickHouse/warehouse/data lake (worker batches NDJSON into MinIO/S3)")
 pending(23, "Analytics: an actual ClickHouse/warehouse/data-lake query layer", "Out of scope - this phase builds the landing pipeline only; no real destination system exists in this environment to integrate against honestly")
+done(24, "AI Gateway: provider-neutral interface (Provider: Name + Complete)")
+done(24, "AI Gateway: local models / Ollama adapter", "Real local inference via a new Ollama container, auto-pulled model, no vendor API key - the one live-testable provider")
+pending(24, "AI Gateway: OpenAI adapter", "Deferred - no real API key in this environment to validate against honestly")
+pending(24, "AI Gateway: Anthropic adapter", "Deferred - no real API key in this environment to validate against honestly")
+pending(24, "AI Gateway: Google adapter", "Deferred - no real API key in this environment to validate against honestly")
+done(24, "AI Gateway: model routing (product-facing ModelAlias, never a vendor model name)")
+done(24, "AI Gateway: quotas (ratelimit.Limiter reused a third time, 60/min/caller)")
+done(24, "AI Gateway: token usage tracking")
+done(24, "AI Gateway: cost tracking (real per-route price table; Ollama honestly priced at 0)")
+done(24, "AI Gateway: audit integration (new AIGatewayAuditRecorder, a genuine audit.Record per call)")
+done(24, "AI Gateway: prompt/version metadata (free-form PromptKey/PromptVersion)")
+done(24, "AI Gateway: timeouts (context.WithTimeout per provider call)")
+done(24, "AI Gateway: fallback (ordered provider/model chain, first success wins)")
+pending(24, "AI Gateway: live token-quantity quota (as opposed to today's call-count quota)", "Deferred - Repository already has the data (Completion.TotalTokens); not wired as a live gate yet")
 
 for n, name, items in [
-    (24, "AI Gateway", ["provider-neutral interface (OpenAI/Anthropic/Google/local/Ollama/vLLM)", "model routing", "quotas", "token usage tracking", "cost tracking", "audit integration", "prompt/version metadata", "timeouts", "fallback"]),
     (25, "Admin Portal", ["control-plane UI in apps/admin", "visibility: Applications", "visibility: Users/Sessions/Devices", "visibility: Roles/Permissions", "visibility: Tenants/Relationships", "visibility: Messages/Notifications", "visibility: Files/Jobs", "visibility: Feature flags/Configuration", "visibility: Moderation/Audit", "visibility: System health/Deployments", "must go through service APIs, never direct DB queries"]),
     (26, "Backstage", ["integrate Backstage as developer portal", "per-module metadata: name/description/owner/lifecycle", "per-module metadata: repository/documentation/dependencies", "per-module metadata: APIs/events/DB ownership/dashboards/runbooks"]),
     (27, "SDKs", ["Flutter SDK", "TypeScript SDK", "Go SDK", "auth + token refresh in each SDK", "pagination + safe retries", "realtime connection helper", "correlation ID propagation", "device registration helper"]),
@@ -280,6 +293,8 @@ module_rows = [
     ("billing/stripe", "core-api", "Real Stripe webhook HMAC-SHA256 signature verification - the one live-testable PaymentProvider this phase ships", "none (stateless verification)", "n/a (provider-signature-authenticated, not a Bearer route)", "Phase 22"),
     ("analytics", "core-api", "Generic event envelope ingestion; analytics_events is a landing buffer, never a query surface", "analytics_events", "Open (IP-rate-limited) to track; platform.admin-only debug listing", "Phase 23"),
     ("worker: analyticspipeline", "worker", "Claims unflushed events, batches as NDJSON, writes to MinIO/S3 - the ClickHouse/warehouse/data-lake landing pattern", "reads/writes analytics_events; writes MinIO/S3", "n/a (background)", "Phase 23"),
+    ("aigateway", "core-api", "Provider-neutral completions API - model routing, quotas, cost tracking, audit, timeouts, fallback", "ai_completions", "Self for own usage; open (quota-limited) to complete", "Phase 24"),
+    ("aigateway/ollama", "core-api", "Real local-inference Provider adapter - the one live-testable Provider this phase ships", "none (stateless HTTP client to a real Ollama container)", "n/a (internal provider adapter, not a route)", "Phase 24"),
 ]
 ws4 = add_sheet(
     "Modules",
@@ -436,6 +451,9 @@ endpoint_rows = [
     E("POST", "/v1/billing/webhooks/{provider}", "billing", "Provider webhook signature (no Bearer token)", "the one route on this platform with no requireUser/requireActive"),
     E("POST", "/v1/analytics/events", "analytics", "Open (IP-rate-limited, no Bearer token)", "the platform's one deliberately unauthenticated write endpoint"),
     E("GET", "/v1/analytics/events", "analytics", "platform.admin", "operational debug view only, not for analytical queries"),
+    E("POST", "/v1/ai/completions", "aigateway", "Authenticated (quota-limited)", "real local inference via Ollama; never call a vendor model name directly"),
+    E("GET", "/v1/ai/usage", "aigateway", "Self or platform.admin", "?userId=; tokens/cost/latency, never prompt or response text"),
+    E("GET", "/v1/ai/models", "aigateway", "Authenticated", "lists registered model aliases, never vendor model names"),
 ]
 ws5 = add_sheet(
     "API Endpoints",
@@ -481,7 +499,7 @@ ws6 = add_sheet(
 infra_rows = [
     ("core-api", "Go service", "http://localhost:8080", "The main platform API - almost every module in this workbook lives here.", "n/a"),
     ("realtime-gateway", "Go service", "ws://localhost:8090", "WebSocket connections, presence, channel fan-out.", "n/a"),
-    ("worker", "Go service", "http://localhost:8091 (health only)", "Background job runner, search indexer, Temporal workflow worker.", "n/a"),
+    ("worker", "Go service", "http://localhost:8091 (health only)", "Background job runner, search indexer, Temporal workflow worker, analytics NDJSON pipeline.", "n/a"),
     ("Postgres", "Docker container", "localhost:5432", "System of record for every domain module.", "core / core, db 'core'"),
     ("Valkey (Redis-compatible)", "Docker container", "localhost:6379", "Realtime pub/sub fan-out, presence (TTL-based).", "no auth locally"),
     ("Keycloak", "Docker container", "http://localhost:8081", "Identity provider. Realm 'core' is re-imported on every restart (no persistent volume).", "admin/admin (master realm); demo/demo (core realm, seeded user)"),
@@ -490,6 +508,7 @@ infra_rows = [
     ("OpenSearch", "Docker container", "http://localhost:9200", "Backs the search module, indexed by worker's indexer.", "no auth locally"),
     ("Temporal", "Docker container", "localhost:7233", "Durable workflow execution engine behind the workflows module.", "no auth locally"),
     ("Kafka / Redpanda", "Docker container", "localhost:9092", "Health-checked today; no producer wired yet (outbox-to-Kafka relay is a documented future gap).", "no auth locally"),
+    ("Ollama", "Docker container", "http://localhost:11434", "Real local LLM inference behind the AI Gateway - model qwen2.5:0.5b auto-pulled on every start, no vendor API key needed.", "no auth locally"),
     ("OTel Collector / Tempo / Prometheus / Grafana / Loki", "Docker containers", "see infra/docker/docker-compose.yml", "Full observability stack - traces, metrics, logs, dashboards.", "no auth locally"),
 ]
 ws7 = add_sheet(
