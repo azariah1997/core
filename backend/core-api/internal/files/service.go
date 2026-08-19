@@ -246,6 +246,41 @@ func (s *Service) PurgeExpired(ctx context.Context, callerID string) (int, error
 	return purged, nil
 }
 
+// DeleteAllForUser is Phase 20's privacy-deletion hook - no HTTP route,
+// called only by the privacy deletion participant
+// (internal/api/privacy_adapters.go). Unlike Delete, it takes no
+// callerID and skips requireOwnerOrAdmin entirely: it IS the
+// system-level "this user's data is being erased" action, not something
+// a normal caller (even the file's own owner) triggers through the
+// regular API. Reuses the same storage-then-row delete order as Delete
+// and PurgeExpired - an object left behind because the row delete failed
+// is a lesser problem than a row claiming a file is gone while its bytes
+// still exist in MinIO/S3.
+func (s *Service) DeleteAllForUser(ctx context.Context, userID string) error {
+	cursor := ""
+	for {
+		result, err := s.repo.ListForOwner(ctx, userID, ListParams{Limit: maxListLimit, Cursor: cursor})
+		if err != nil {
+			return err
+		}
+		for _, f := range result.Items {
+			if f.Status == StatusDeleted {
+				continue
+			}
+			if err := s.store.DeleteObject(ctx, f.ObjectKey); err != nil {
+				return err
+			}
+			if _, err := s.repo.SoftDelete(ctx, f.ID); err != nil {
+				return err
+			}
+		}
+		if result.NextCursor == "" {
+			return nil
+		}
+		cursor = result.NextCursor
+	}
+}
+
 func (s *Service) requireVisible(ctx context.Context, callerID string, f File) error {
 	if f.Visibility == VisibilityPublic {
 		return nil

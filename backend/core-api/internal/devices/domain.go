@@ -73,4 +73,10 @@ type Repository interface {
 	Register(ctx context.Context, userID string, in RegisterInput) (Device, error)
 	List(ctx context.Context, userID string) ([]Device, error)
 	Revoke(ctx context.Context, userID, deviceID string) error
+	// RevokeAll is Phase 20's addition - used only by the privacy
+	// deletion participant (internal/api/privacy_adapters.go), never by
+	// an HTTP route: revoking every one of a user's devices in one call
+	// is exactly the kind of system-level action a normal caller has no
+	// reason to trigger directly.
+	RevokeAll(ctx context.Context, userID string) error
 }

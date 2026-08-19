@@ -62,6 +62,18 @@ func (s *Service) List(ctx context.Context, callerID string, filter ListFilter) 
 	return s.repo.List(ctx, filter)
 }
 
+// ListMine is Phase 20's privacy-export hook: a user's own actions,
+// unlike browsing everyone's, needs no admin check at all - "you can see
+// what you did" is a different, much weaker claim than List's "you can
+// see what everyone did," and the two deserve different gates rather
+// than reusing requireAdmin here. No HTTP route for this in this phase's
+// scope - it's called only by the privacy export participant
+// (internal/api/privacy_adapters.go); a self-service "my audit history"
+// endpoint would be a reasonable, separate future addition.
+func (s *Service) ListMine(ctx context.Context, userID string) (ListResult, error) {
+	return s.repo.List(ctx, ListFilter{ActorUserID: userID, Limit: maxListLimit})
+}
+
 func (s *Service) requireAdmin(ctx context.Context, callerID string) error {
 	isAdmin, err := s.admin.IsPlatformAdmin(ctx, callerID)
 	if err != nil {

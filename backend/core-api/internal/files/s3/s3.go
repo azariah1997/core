@@ -6,6 +6,7 @@
 package s3
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -106,6 +107,20 @@ func (s *Store) HeadObject(ctx context.Context, objectKey string) (int64, string
 	size := aws.ToInt64(out.ContentLength)
 	etag := strings.Trim(aws.ToString(out.ETag), `"`)
 	return size, etag, nil
+}
+
+// PutObject writes bytes directly, server-side - unlike every other
+// write in this package (PresignPut hands the client a URL to upload
+// to), this one exists for Phase 20's privacy export bundle, which this
+// service assembles itself in-process and has no client to hand a
+// presigned URL to.
+func (s *Store) PutObject(ctx context.Context, objectKey string, body []byte, contentType string) error {
+	if _, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: aws.String(s.bucket), Key: aws.String(objectKey), Body: bytes.NewReader(body), ContentType: aws.String(contentType),
+	}); err != nil {
+		return fmt.Errorf("put object: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) DeleteObject(ctx context.Context, objectKey string) error {

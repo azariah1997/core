@@ -35,6 +35,9 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/notifications"
 	notificationspg "github.com/example/core-platform/backend/core-api/internal/notifications/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/notifications/senders"
+	"github.com/example/core-platform/backend/core-api/internal/privacy"
+	privacypg "github.com/example/core-platform/backend/core-api/internal/privacy/postgres"
+	privacyworkflow "github.com/example/core-platform/backend/core-api/internal/privacy/workflow"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipspg "github.com/example/core-platform/backend/core-api/internal/relationships/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/remoteconfig"
@@ -173,7 +176,38 @@ func main() {
 
 	remoteConfigSvc := remoteconfig.NewService(remoteconfigpg.New(pool), authzSvc)
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc))
+	// Phase 20: privacy.Service reuses temporalClient (WorkflowStarter)
+	// and objectStore (ExportStore, now that files/s3.Store has
+	// PutObject) directly - both already satisfy the interfaces it
+	// needs, no adapter required. Its own worker is a second, separate
+	// Temporal worker (see internal/privacy/workflow's doc comment for
+	// why) started further down, once every participant is registered.
+	privacySvc := privacy.NewService(privacypg.New(pool), authzSvc, temporalClient, objectStore)
+
+	usersPrivacyParticipant := api.NewUsersPrivacyParticipant(usersSvc)
+	privacySvc.RegisterExporter("users", usersPrivacyParticipant)
+	privacySvc.RegisterDeleter("users", usersPrivacyParticipant)
+
+	devicesPrivacyParticipant := api.NewDevicesPrivacyParticipant(devicesSvc)
+	privacySvc.RegisterExporter("devices", devicesPrivacyParticipant)
+	privacySvc.RegisterDeleter("devices", devicesPrivacyParticipant)
+
+	filesPrivacyParticipant := api.NewFilesPrivacyParticipant(filesSvc)
+	privacySvc.RegisterExporter("files", filesPrivacyParticipant)
+	privacySvc.RegisterDeleter("files", filesPrivacyParticipant)
+
+	// audit is Exporter-only, deliberately never registered as a
+	// Deleter - see internal/api/privacy_adapters.go's doc comment.
+	privacySvc.RegisterExporter("audit", api.NewAuditPrivacyParticipant(auditSvc))
+
+	stopPrivacyWorker, err := privacyworkflow.StartWorker(cfg.TemporalAddr, privacySvc)
+	if err != nil {
+		logger.Error("failed to start privacy workflow worker", "error", err)
+		os.Exit(1)
+	}
+	defer stopPrivacyWorker()
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {

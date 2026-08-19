@@ -94,6 +94,20 @@ func (r *Repository) Revoke(ctx context.Context, userID, deviceID string) error 
 	return nil
 }
 
+// RevokeAll revokes every active device for a user in one statement -
+// deliberately not "one Revoke call per device," so the privacy
+// deletion workflow (Phase 20) that calls this doesn't need to List
+// first just to loop.
+func (r *Repository) RevokeAll(ctx context.Context, userID string) error {
+	_, err := r.pool.Exec(ctx,
+		`UPDATE devices SET session_status = 'revoked' WHERE user_id = $1 AND session_status = 'active'`,
+		userID)
+	if err != nil {
+		return fmt.Errorf("revoke all devices: %w", err)
+	}
+	return nil
+}
+
 func nullIfEmpty(s string) any {
 	if s == "" {
 		return nil

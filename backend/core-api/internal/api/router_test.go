@@ -32,6 +32,8 @@ import (
 	messagingmemory "github.com/example/core-platform/backend/core-api/internal/messaging/memory"
 	"github.com/example/core-platform/backend/core-api/internal/notifications"
 	notificationsmemory "github.com/example/core-platform/backend/core-api/internal/notifications/memory"
+	"github.com/example/core-platform/backend/core-api/internal/privacy"
+	privacymemory "github.com/example/core-platform/backend/core-api/internal/privacy/memory"
 	"github.com/example/core-platform/backend/core-api/internal/relationships"
 	relationshipsmemory "github.com/example/core-platform/backend/core-api/internal/relationships/memory"
 	"github.com/example/core-platform/backend/core-api/internal/remoteconfig"
@@ -73,6 +75,13 @@ func (noopObjectStore) HeadObject(ctx context.Context, objectKey string) (int64,
 }
 func (noopObjectStore) DeleteObject(ctx context.Context, objectKey string) error { return nil }
 
+// PutObject satisfies privacy.ExportStore alongside the PresignGet
+// above - noopTemporalClient below already matches privacy.WorkflowStarter
+// exactly, so neither test double needed a Phase-20-specific twin.
+func (noopObjectStore) PutObject(ctx context.Context, objectKey string, body []byte, contentType string) error {
+	return nil
+}
+
 // noopSearchProvider satisfies searchidx.Provider without a real
 // OpenSearch - these router tests exercise HTTP wiring and cross-module
 // auth, not indexing/search (that's search's own package tests, and this
@@ -111,25 +120,47 @@ func newTestHandler() http.Handler {
 	authzSvc := authz.NewService(authzmemory.NewRoleRepository(), authzmemory.NewProvider(), roleChangeAuditRecorder, slog.Default())
 	auditSvc := audit.NewService(auditmemory.New(), authzSvc)
 	roleChangeAuditRecorder.SetAuditService(auditSvc)
+
+	usersSvc := users.NewService(usersmemory.New())
+	devicesSvc := devices.NewService(devicesmemory.New())
+	filesSvc := files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{})
+
+	// Same registration cmd/server/main.go performs, against the same
+	// noop test doubles used elsewhere in this file - noopTemporalClient
+	// satisfies privacy.WorkflowStarter and noopObjectStore satisfies
+	// privacy.ExportStore with zero Phase-20-specific fakes needed.
+	privacySvc := privacy.NewService(privacymemory.New(), authzSvc, noopTemporalClient{}, noopObjectStore{})
+	usersPrivacyParticipant := NewUsersPrivacyParticipant(usersSvc)
+	privacySvc.RegisterExporter("users", usersPrivacyParticipant)
+	privacySvc.RegisterDeleter("users", usersPrivacyParticipant)
+	devicesPrivacyParticipant := NewDevicesPrivacyParticipant(devicesSvc)
+	privacySvc.RegisterExporter("devices", devicesPrivacyParticipant)
+	privacySvc.RegisterDeleter("devices", devicesPrivacyParticipant)
+	filesPrivacyParticipant := NewFilesPrivacyParticipant(filesSvc)
+	privacySvc.RegisterExporter("files", filesPrivacyParticipant)
+	privacySvc.RegisterDeleter("files", filesPrivacyParticipant)
+	privacySvc.RegisterExporter("audit", NewAuditPrivacyParticipant(auditSvc))
+
 	return New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
 		identity.NewService("fake", identitymemory.Provider{}, identitymemory.New()),
-		users.NewService(usersmemory.New()),
-		devices.NewService(devicesmemory.New()),
+		usersSvc,
+		devicesSvc,
 		authzSvc,
 		tenants.NewService(tenantsmemory.New()),
 		relationships.NewService(relationshipsmemory.New()),
 		groups.NewService(groupsmemory.New()),
 		messaging.NewService(messagingmemory.New(), noopRealtime{}, slog.Default()),
 		notifications.NewService(notificationsmemory.New(), nil, authzSvc, slog.Default()),
-		files.NewService(filesmemory.New(), noopObjectStore{}, authzSvc, files.Config{}),
+		filesSvc,
 		search.NewService(noopSearchProvider{}, authzSvc),
 		jobs.NewService(jobsmemory.New(), authzSvc),
 		workflows.NewService(workflowsmemory.New(), noopTemporalClient{}, authzSvc),
 		features.NewService(featuresmemory.New(), authzSvc),
 		remoteconfig.NewService(remoteconfigmemory.New(), authzSvc),
 		auditSvc,
+		privacySvc,
 	)
 }
 
@@ -356,6 +387,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 	authzSvc := authz.NewService(roles, authzmemory.NewProvider(), roleChangeAuditRecorder, slog.Default())
 	auditSvc := audit.NewService(auditmemory.New(), authzSvc)
 	roleChangeAuditRecorder.SetAuditService(auditSvc)
+	privacySvc := privacy.NewService(privacymemory.New(), authzSvc, noopTemporalClient{}, noopObjectStore{})
 	handler := New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
@@ -375,6 +407,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		features.NewService(featuresmemory.New(), authzSvc),
 		remoteconfig.NewService(remoteconfigmemory.New(), authzSvc),
 		auditSvc,
+		privacySvc,
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

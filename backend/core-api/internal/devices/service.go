@@ -30,3 +30,9 @@ func (s *Service) List(ctx context.Context, userID string) ([]Device, error) {
 func (s *Service) Revoke(ctx context.Context, userID, deviceID string) error {
 	return s.repo.Revoke(ctx, userID, deviceID)
 }
+
+// RevokeAll is Phase 20's privacy-deletion hook - see the Repository
+// interface's comment on RevokeAll for why it has no HTTP route.
+func (s *Service) RevokeAll(ctx context.Context, userID string) error {
+	return s.repo.RevokeAll(ctx, userID)
+}

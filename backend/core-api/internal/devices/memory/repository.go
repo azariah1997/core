@@ -77,3 +77,15 @@ func (r *Repository) Revoke(ctx context.Context, userID, deviceID string) error 
 	r.byID[deviceID] = d
 	return nil
 }
+
+func (r *Repository) RevokeAll(ctx context.Context, userID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, d := range r.byID {
+		if d.UserID == userID && d.SessionStatus == devices.SessionActive {
+			d.SessionStatus = devices.SessionRevoked
+			r.byID[id] = d
+		}
+	}
+	return nil
+}
