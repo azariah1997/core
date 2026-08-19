@@ -49,3 +49,37 @@ func requireUser(identitySvc *identity.Service, usersSvc *users.Service) func(ht
 		}))
 	}
 }
+
+// RestrictionChecker is satisfied directly by *trustsafety.Service.
+type RestrictionChecker interface {
+	IsRestricted(ctx context.Context, userID string) (bool, string, error)
+}
+
+// requireActive layers Phase 21's Suspension/Ban enforcement on top of
+// requireUser, in exactly one place, rather than every module checking
+// it independently - the same "one entry point, not per-module logic"
+// principle authz.Service.Can already establishes for permissions.
+//
+// Deliberately NOT applied to every route: users (so a suspended/banned
+// caller can still see their own profile and status) and trustsafety
+// itself (so they can still file an appeal) are wired with plain
+// requireUser in router.go instead - a restricted user must never be
+// locked out of knowing why, or contesting it.
+func requireActive(identitySvc *identity.Service, usersSvc *users.Service, restrictions RestrictionChecker) func(http.Handler) http.Handler {
+	base := requireUser(identitySvc, usersSvc)
+	return func(next http.Handler) http.Handler {
+		return base(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			u, _ := users.FromContext(r.Context())
+			restricted, reason, err := restrictions.IsRestricted(r.Context(), u.ID)
+			if err != nil {
+				apperr.Write(w, r, apperr.New(apperr.CodeInternal, "failed to check account restrictions"))
+				return
+			}
+			if restricted {
+				apperr.Write(w, r, apperr.New(apperr.CodeAccessDenied, "account is restricted: "+reason))
+				return
+			}
+			next.ServeHTTP(w, r)
+		}))
+	}
+}

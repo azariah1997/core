@@ -41,6 +41,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/search"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
 	tenantsmemory "github.com/example/core-platform/backend/core-api/internal/tenants/memory"
+	"github.com/example/core-platform/backend/core-api/internal/trustsafety"
+	trustsafetymemory "github.com/example/core-platform/backend/core-api/internal/trustsafety/memory"
 	"github.com/example/core-platform/backend/core-api/internal/users"
 	usersmemory "github.com/example/core-platform/backend/core-api/internal/users/memory"
 	"github.com/example/core-platform/backend/core-api/internal/workflows"
@@ -112,6 +114,16 @@ func (noopTemporalClient) Signal(ctx context.Context, workflowID, runID, signalN
 	return nil
 }
 
+// noopRateLimiter always allows - these router tests exercise HTTP
+// wiring and cross-module auth, not rate-limiting behavior itself
+// (that's trustsafety's own package tests, against a real miniredis-
+// backed ratelimit.Limiter).
+type noopRateLimiter struct{}
+
+func (noopRateLimiter) Allow(ctx context.Context, key string, limit int, window time.Duration) (bool, error) {
+	return true, nil
+}
+
 func newTestHandler() http.Handler {
 	// Same two-phase wiring cmd/server/main.go uses to break the
 	// authz<->audit construction cycle - see audit_adapter.go's doc
@@ -141,6 +153,10 @@ func newTestHandler() http.Handler {
 	privacySvc.RegisterDeleter("files", filesPrivacyParticipant)
 	privacySvc.RegisterExporter("audit", NewAuditPrivacyParticipant(auditSvc))
 
+	// authzSvc already satisfies trustsafety.ModeratorChecker directly
+	// (IsPlatformAdmin plus IsModerator).
+	trustSafetySvc := trustsafety.NewService(trustsafetymemory.New(), authzSvc, noopRateLimiter{})
+
 	return New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
@@ -161,6 +177,7 @@ func newTestHandler() http.Handler {
 		remoteconfig.NewService(remoteconfigmemory.New(), authzSvc),
 		auditSvc,
 		privacySvc,
+		trustSafetySvc,
 	)
 }
 
@@ -388,6 +405,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 	auditSvc := audit.NewService(auditmemory.New(), authzSvc)
 	roleChangeAuditRecorder.SetAuditService(auditSvc)
 	privacySvc := privacy.NewService(privacymemory.New(), authzSvc, noopTemporalClient{}, noopObjectStore{})
+	trustSafetySvc := trustsafety.NewService(trustsafetymemory.New(), authzSvc, noopRateLimiter{})
 	handler := New(
 		config.Load(),
 		applications.NewService(applicationsmemory.New()),
@@ -408,6 +426,7 @@ func TestGetUserByIDAllowsPlatformAdminCrossUserAccess(t *testing.T) {
 		remoteconfig.NewService(remoteconfigmemory.New(), authzSvc),
 		auditSvc,
 		privacySvc,
+		trustSafetySvc,
 	)
 
 	otherUserID := provisionUser(t, handler, "someone-else")

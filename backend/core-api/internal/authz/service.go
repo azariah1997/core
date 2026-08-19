@@ -105,3 +105,13 @@ func (s *Service) Can(ctx context.Context, subjectUserID string, action Action, 
 func (s *Service) IsPlatformAdmin(ctx context.Context, userID string) (bool, error) {
 	return s.Can(ctx, userID, actionAdmin, platformResource)
 }
+
+// IsModerator is Phase 21's convenience for "does this caller have
+// moderation access" - unlike IsPlatformAdmin, it's sourced from RBAC
+// directly (HasRole), not the fine-grained OpenFGA relation, because
+// AssignRole only ever writes a fine-grained grant for platform.admin
+// specifically (see AssignRole above); moderator has no equivalent
+// relation to check.
+func (s *Service) IsModerator(ctx context.Context, userID string) (bool, error) {
+	return s.HasRole(ctx, userID, RoleModerator)
+}

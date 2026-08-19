@@ -45,6 +45,8 @@ import (
 	"github.com/example/core-platform/backend/core-api/internal/search"
 	"github.com/example/core-platform/backend/core-api/internal/tenants"
 	tenantspg "github.com/example/core-platform/backend/core-api/internal/tenants/postgres"
+	"github.com/example/core-platform/backend/core-api/internal/trustsafety"
+	trustsafetypg "github.com/example/core-platform/backend/core-api/internal/trustsafety/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/users"
 	userspg "github.com/example/core-platform/backend/core-api/internal/users/postgres"
 	"github.com/example/core-platform/backend/core-api/internal/workflows"
@@ -54,6 +56,7 @@ import (
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
 	"github.com/example/core-platform/packages/go/platformkit/pg"
+	"github.com/example/core-platform/packages/go/platformkit/ratelimit"
 	"github.com/example/core-platform/packages/go/platformkit/rtbus"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
 	"github.com/example/core-platform/packages/go/platformkit/searchidx"
@@ -207,7 +210,13 @@ func main() {
 	}
 	defer stopPrivacyWorker()
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc))
+	// Phase 21: authzSvc already satisfies trustsafety.ModeratorChecker
+	// directly (IsPlatformAdmin plus the new IsModerator), and
+	// ratelimit.Limiter wraps the same redisClient messaging/
+	// notifications already use - no new infra connection needed.
+	trustSafetySvc := trustsafety.NewService(trustsafetypg.New(pool), authzSvc, ratelimit.New(redisClient))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, apps, identitySvc, usersSvc, devicesSvc, authzSvc, tenantsSvc, relationshipsSvc, groupsSvc, messagingSvc, notificationsSvc, filesSvc, searchSvc, jobsSvc, workflowsSvc, featuresSvc, remoteConfigSvc, auditSvc, privacySvc, trustSafetySvc))
 	srv := &http.Server{Addr: cfg.HTTPAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
 
 	if err := runx.Serve(ctx, logger, srv); err != nil {
