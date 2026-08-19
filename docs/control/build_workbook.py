@@ -444,6 +444,7 @@ test_rows = [
     ("15", "Watch the database directly", "docker exec -it docker-postgres-1 psql -U core -d core", "Useful for sanity-checking: SELECT * FROM outbox_events ORDER BY id DESC LIMIT 20; or SELECT * FROM audit_events ORDER BY occurred_at DESC LIMIT 20;"),
     ("16", "Read the validation history", "VALIDATION.md (repo root)", "Every phase's actual live-validation pass is written up there in detail - exact curl sequences, real bugs found and fixed, and what was deliberately left out of scope."),
     ("17", "Run the smoke test", "make smoke", "A scripted end-to-end pass (scripts/smoke.sh) against the real running services - the fastest single command to confirm the whole stack still works after a change."),
+    ("18", "Skip the curl entirely", "Open this dashboard's API Console tab", "Pick an endpoint, fetch a token via the built-in Keycloak password-grant form (or paste one you already have), and send the request - the real response comes back right in the page. core-api's CORS middleware (internal/api/cors.go) is what makes this possible; it must be running a build from Phase 21 or later."),
 ]
 ws6 = add_sheet(
     "How To Test",

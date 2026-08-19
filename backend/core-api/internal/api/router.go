@@ -75,7 +75,7 @@ func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Se
 		apperr.Write(w, r, apperr.New(apperr.CodeNotFound, "resource not found"))
 	})
 
-	return correlation.Middleware(mux)
+	return corsMiddleware(correlation.Middleware(mux))
 }
 
 func dependencyChecks(cfg config.Config) health.Checks {
