@@ -72,9 +72,16 @@ class Platform {
   final String name;
   final String environment;
   final String apiVersion;
-  Platform({required this.name, required this.environment, required this.apiVersion});
-  factory Platform.fromJson(Map<String, dynamic> j) =>
-      Platform(name: j['name'] as String, environment: j['environment'] as String, apiVersion: j['apiVersion'] as String);
+  /// The real short git commit SHA core-api was built from (Phase 29) -
+  /// "dev" outside a git checkout or when git isn't on PATH.
+  final String version;
+  Platform({required this.name, required this.environment, required this.apiVersion, required this.version});
+  factory Platform.fromJson(Map<String, dynamic> j) => Platform(
+        name: j['name'] as String,
+        environment: j['environment'] as String,
+        apiVersion: j['apiVersion'] as String,
+        version: j['version'] as String,
+      );
 }
 
 class Identity {

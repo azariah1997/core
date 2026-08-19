@@ -4,14 +4,18 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
 func TestLiveAlwaysOK(t *testing.T) {
 	rr := httptest.NewRecorder()
-	Live("svc")(rr, httptest.NewRequest("GET", "/livez", nil))
+	Live("svc", "abc1234")(rr, httptest.NewRequest("GET", "/livez", nil))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), `"version":"abc1234"`) {
+		t.Fatalf("expected the real version to appear in the response, got %s", rr.Body.String())
 	}
 }
 
@@ -39,7 +43,7 @@ func TestHealthAlwaysReturns200EvenWhenNotReady(t *testing.T) {
 		return []Result{{Name: "db", OK: false, Error: "boom"}}
 	}
 	rr := httptest.NewRecorder()
-	Health("svc", failing)(rr, httptest.NewRequest("GET", "/healthz", nil))
+	Health("svc", "abc1234", failing)(rr, httptest.NewRequest("GET", "/healthz", nil))
 	if rr.Code != http.StatusOK {
 		t.Fatalf("healthz should aggregate not gate, expected 200, got %d", rr.Code)
 	}

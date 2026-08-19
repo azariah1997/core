@@ -99,9 +99,9 @@ func main() {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /livez", health.Live(serviceName))
+	mux.HandleFunc("GET /livez", health.Live(serviceName, cfg.Version))
 	mux.HandleFunc("GET /readyz", health.Ready(dependencyChecks))
-	mux.HandleFunc("GET /healthz", health.Health(serviceName, dependencyChecks))
+	mux.HandleFunc("GET /healthz", health.Health(serviceName, cfg.Version, dependencyChecks))
 	mux.Handle("GET /metrics", metrics.Handler())
 	mux.Handle("GET /ws", wsAuthMiddleware(verifier, resolver)(ws.NewHandler(realtimeHub, presenceTracker, logger)))
 

@@ -15,6 +15,9 @@ type Platform struct {
 	Name        string `json:"name"`
 	Environment string `json:"environment"`
 	APIVersion  string `json:"apiVersion"`
+	// Version is the real short git commit SHA core-api was built from
+	// (Phase 29) - "dev" outside a git checkout or when git isn't on PATH.
+	Version string `json:"version"`
 }
 
 func (c *Client) GetPlatform(ctx context.Context) (Platform, error) {

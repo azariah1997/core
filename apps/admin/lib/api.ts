@@ -54,13 +54,15 @@ async function withApi<T>(fn: (client: CoreApi) => Promise<T>): Promise<T> {
 // not routed through the SDK (which is for authenticated core-api/
 // realtime-gateway API calls, not raw infra health checks).
 
-export type HealthResult = { name: string; url: string; ok: boolean; detail?: string };
+export type HealthResult = { name: string; url: string; ok: boolean; detail?: string; version?: string };
 
 async function checkHealth(name: string, baseUrl: string): Promise<HealthResult> {
   try {
     const res = await fetch(`${baseUrl}/healthz`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
     const body = await res.json().catch(() => ({}));
-    return { name, url: baseUrl, ok: res.ok, detail: body?.status };
+    // version is the real short git commit SHA the service was built
+    // from (Phase 29) - "dev" outside a git checkout, never fabricated.
+    return { name, url: baseUrl, ok: res.ok, detail: body?.status, version: body?.version };
   } catch (e) {
     return { name, url: baseUrl, ok: false, detail: e instanceof Error ? e.message : "unreachable" };
   }
@@ -72,6 +74,14 @@ export async function getSystemHealth(): Promise<HealthResult[]> {
     checkHealth("realtime-gateway", REALTIME_URL),
     checkHealth("worker", WORKER_URL),
   ]);
+}
+
+// --- platform (Phase 29's real "environments" and "versions" source) ---
+
+export type { Platform } from "@core-platform/sdk";
+
+export function getPlatform() {
+  return withApi((client) => client.getPlatform());
 }
 
 // --- applications ---

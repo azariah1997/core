@@ -39,9 +39,9 @@ const serviceName = "core-api"
 func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Service, usersSvc *users.Service, devicesSvc *devices.Service, authzSvc *authz.Service, tenantsSvc *tenants.Service, relationshipsSvc *relationships.Service, groupsSvc *groups.Service, messagingSvc *messaging.Service, notificationsSvc *notifications.Service, filesSvc *files.Service, searchSvc *search.Service, jobsSvc *jobs.Service, workflowsSvc *workflows.Service, featuresSvc *features.Service, remoteConfigSvc *remoteconfig.Service, auditSvc *audit.Service, privacySvc *privacy.Service, trustSafetySvc *trustsafety.Service, billingSvc *billing.Service, analyticsSvc *analytics.Service, aiGatewaySvc *aigateway.Service) http.Handler {
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("GET /livez", health.Live(serviceName))
+	mux.HandleFunc("GET /livez", health.Live(serviceName, cfg.Version))
 	mux.HandleFunc("GET /readyz", health.Ready(dependencyChecks(cfg)))
-	mux.HandleFunc("GET /healthz", health.Health(serviceName, dependencyChecks(cfg)))
+	mux.HandleFunc("GET /healthz", health.Health(serviceName, cfg.Version, dependencyChecks(cfg)))
 	mux.Handle("GET /metrics", metrics.Handler())
 
 	applications.RegisterRoutes(mux, apps)
@@ -83,7 +83,7 @@ func New(cfg config.Config, apps *applications.Service, identitySvc *identity.Se
 	authz.RegisterRoutes(mux, authzSvc, requireActive(identitySvc, usersSvc, trustSafetySvc))
 
 	mux.HandleFunc("GET /v1/platform", func(w http.ResponseWriter, r *http.Request) {
-		httpx.JSON(w, 200, map[string]any{"name": cfg.PlatformName, "environment": cfg.Env, "apiVersion": "v1"})
+		httpx.JSON(w, 200, map[string]any{"name": cfg.PlatformName, "environment": cfg.Env, "apiVersion": "v1", "version": cfg.Version})
 	})
 	mux.HandleFunc("POST /v1/data/query", func(w http.ResponseWriter, r *http.Request) {
 		apperr.Write(w, r, apperr.New(apperr.CodeNotImplemented,

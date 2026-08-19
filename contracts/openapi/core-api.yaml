@@ -9,7 +9,18 @@ paths:
     get:
       operationId: getPlatform
       responses:
-        '200': { description: Platform metadata }
+        '200':
+          description: Platform metadata
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [name, environment, apiVersion, version]
+                properties:
+                  name: { type: string }
+                  environment: { type: string }
+                  apiVersion: { type: string, description: This API contract's own version, currently always "v1". }
+                  version: { type: string, description: "The real short git commit SHA this process was built from (Phase 29) - \"dev\" outside a git checkout or when git isn't on PATH." }
   /users/me:
     get:
       operationId: getCurrentUser

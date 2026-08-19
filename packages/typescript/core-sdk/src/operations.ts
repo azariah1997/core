@@ -154,6 +154,9 @@ export interface Platform {
   name: string;
   environment: string;
   apiVersion: string;
+  /** The real short git commit SHA core-api was built from (Phase 29) -
+   * "dev" outside a git checkout or when git isn't on PATH. */
+  version: string;
 }
 
 export interface Identity {

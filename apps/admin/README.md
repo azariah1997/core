@@ -16,6 +16,20 @@ Two small backend additions this phase made real, not just visible:
 - `GET /v1/users` (`backend/core-api/internal/users/http.go`) - the platform's first admin-wide user listing, cursor-paginated, gated by a new `IsPlatformAdmin` check on `AccessChecker`.
 - `authz`'s first-ever HTTP surface (`backend/core-api/internal/authz/http.go`) - `GET/POST /v1/authz/roles`, `POST /v1/authz/roles/revoke` - replacing the throwaway `cmd/regrant-*/main.go` Go programs every earlier phase's live validation needed to grant itself a role. `Service.RolesFor` allows self-lookup or platform.admin; `AssignRole`/`RevokeRole` already required an acting-user ID from Phase 19's audit work.
 
+## `/control-plane` (Phase 29)
+
+The roadmap's "one view showing applications/services/versions/environments/dependencies/deployments/database ownership/events/API contracts/health/alerts/recent changes." Every section is real, from sources deliberately different from the rest of this app:
+
+- **Applications/health**: the same core-api/SDK calls every other page uses.
+- **Versions**: each service's real `/healthz` now carries `version` - the actual short git commit SHA it was built from (`config.Version`, Phase 29), not a hardcoded string.
+- **Environment**: read live from `GET /v1/platform`'s `environment` field - one real entry, since this has only ever run in one environment; not a fabricated multi-env list.
+- **Dependencies, database ownership, events**: `lib/controlplane.ts` reads `docs/control/platform.json`, a machine-readable export `docs/control/build_workbook.py` writes from the same in-memory data (and a fresh parse of `catalog/system.yaml`/`contracts/asyncapi/events.yaml`) that produces the dashboard workbook - one source, not a third hand-authored copy.
+- **Alerts**: a real, live fetch of Prometheus's `/api/v1/alerts` (Phase 28's rules) - an empty list when nothing's firing, or when Prometheus isn't reachable, is the honest answer either way.
+- **Recent changes**: a real `git log` of this checkout, run server-side.
+- **Deployments**: still an honest placeholder - no CI/CD pipeline or deployment tracking exists in this environment. The real per-service `version` above is the closest honest signal ("which commit is running"), not a substitute for "which deployment shipped it."
+
+`lib/controlplane.ts` reaching outside the SDK (a local file read, Prometheus, `git`) is a deliberate, narrow exception to "every page goes through core-api" - none of those three is production application data behind a service API; they're the platform's own build tooling output, its own metrics infrastructure, and its own version control history, which is the literal subject matter of a "platform control plane" page.
+
 ## Layout
 
 - `middleware.ts` - cookie-presence redirect gate.
@@ -29,8 +43,8 @@ Two small backend additions this phase made real, not just visible:
 
 ## Environment
 
-Every value defaults to this repo's real local dev addresses (`http://localhost:8080` for core-api, `8090` realtime-gateway, `8091` worker, `8081` Keycloak, realm `core`, client `core-platform`) - matching root `.env` exactly, so no `.env.local` is required for local development. Override via `CORE_API_URL`, `REALTIME_HEALTH_URL`, `WORKER_HEALTH_URL`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` for any other environment.
+Every value defaults to this repo's real local dev addresses (`http://localhost:8080` for core-api, `8090` realtime-gateway, `8091` worker, `8081` Keycloak, realm `core`, client `core-platform`, `9090` Prometheus) - matching root `.env` exactly, so no `.env.local` is required for local development. Override via `CORE_API_URL`, `REALTIME_HEALTH_URL`, `WORKER_HEALTH_URL`, `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID`, `PROMETHEUS_URL` for any other environment.
 
 ## Not done here
 
-Sessions & Devices, Tenants, Relationships, Messages, Notifications, and Files are real backend modules with no admin-wide listing endpoint yet - each `ComingSoon` page names that specific gap. Deployments has nothing to show until Phase 29 (CI/CD, Helm releases, rollout status) gives it real data. Permissions documents the RBAC (`authz` roles, managed here) + ReBAC (relationship-tuple engine, not yet browsable) model rather than rendering a table.
+Sessions & Devices, Tenants, Relationships, Messages, Notifications, and Files are real backend modules with no admin-wide listing endpoint yet - each `ComingSoon` page names that specific gap. Deployments has nothing to show until a real CI/CD pipeline exists (`/control-plane`'s own Deployments section documents this directly, rather than a separate `ComingSoon` page duplicating the explanation). Permissions documents the RBAC (`authz` roles, managed here) + ReBAC (relationship-tuple engine, not yet browsable) model rather than rendering a table.

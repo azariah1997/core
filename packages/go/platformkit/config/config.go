@@ -3,12 +3,22 @@ package config
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 )
 
 type Config struct {
 	Env          string
 	PlatformName string
+	// Version identifies the actual code running - the real git commit
+	// SHA it was built from (BUILD_VERSION, or `git rev-parse
+	// --short HEAD` read automatically at startup if unset), never a
+	// hardcoded string. Falls back to "dev" outside a git checkout or
+	// when git isn't on PATH - both honest, real states (Phase 29's
+	// "versions" control-plane dimension has nothing fabricated to show
+	// there either). Deliberately not tied to a CI/CD build number,
+	// since none exists yet - see Phase 29's own "deployments" gap.
+	Version      string
 	HTTPAddr     string
 	RealtimeAddr string
 	WorkerAddr   string
@@ -55,6 +65,7 @@ func Load() Config {
 	return Config{
 		Env:          env("PLATFORM_ENV", "local"),
 		PlatformName: env("PLATFORM_NAME", "core-platform"),
+		Version:      env("BUILD_VERSION", gitVersion()),
 		HTTPAddr:     env("HTTP_ADDR", ":8080"),
 		RealtimeAddr: env("REALTIME_ADDR", ":8090"),
 		WorkerAddr:   env("WORKER_HTTP_ADDR", ":8091"),
@@ -121,4 +132,17 @@ func env(k, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// gitVersion reads the real short commit SHA of the checkout this
+// process is running from, so a service reports what code it's
+// actually running without a CI/CD pipeline having to inject anything -
+// "dev" outside a git checkout or when git isn't on PATH, both real,
+// honest states rather than a fabricated version string.
+func gitVersion() string {
+	out, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+	if err != nil {
+		return "dev"
+	}
+	return strings.TrimSpace(string(out))
 }

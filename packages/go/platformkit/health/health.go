@@ -43,10 +43,13 @@ func normalize(s string) string {
 
 // Live reports that the process is alive. It never depends on external
 // systems, so orchestrators use it to decide whether to restart the
-// container.
-func Live(service string) http.HandlerFunc {
+// container. version is the real git commit SHA this process was built
+// from (config.Config.Version) - Phase 29's control-plane "versions"
+// dimension reads it from here rather than a separate endpoint, since
+// every service already exposes this uniformly.
+func Live(service, version string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		httpx.JSON(w, http.StatusOK, map[string]any{"status": "ok", "service": service})
+		httpx.JSON(w, http.StatusOK, map[string]any{"status": "ok", "service": service, "version": version})
 	}
 }
 
@@ -66,11 +69,11 @@ func Ready(checks Checks) http.HandlerFunc {
 // Health returns an aggregated operational view combining liveness and
 // dependency status, for dashboards and manual inspection. It always
 // returns 200 so it never triggers orchestrator action on its own.
-func Health(service string, checks Checks) http.HandlerFunc {
+func Health(service, version string, checks Checks) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		results, ok := run(r, checks)
 		httpx.JSON(w, http.StatusOK, map[string]any{
-			"status": "ok", "service": service, "ready": ok, "dependencies": results,
+			"status": "ok", "service": service, "version": version, "ready": ok, "dependencies": results,
 		})
 	}
 }

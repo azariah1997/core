@@ -9,7 +9,10 @@ export type NavItem = { label: string; href: string; live: boolean };
 export const NAV: { section: string; items: NavItem[] }[] = [
   {
     section: "Overview",
-    items: [{ label: "Dashboard", href: "/", live: true }],
+    items: [
+      { label: "Dashboard", href: "/", live: true },
+      { label: "Control Plane", href: "/control-plane", live: true },
+    ],
   },
   {
     section: "Identity & Access",

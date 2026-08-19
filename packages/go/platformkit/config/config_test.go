@@ -1,6 +1,25 @@
 package config
 
-import "testing"
+import (
+	"os"
+	"regexp"
+	"testing"
+)
+
+// TestVersionReadsTheRealGitSHA proves gitVersion() actually shells out
+// to the real repo, not a hardcoded stand-in - this test runs inside
+// this real repo's checkout, so Load().Version must be a real short
+// SHA (7+ hex chars), not "dev" (the only fallback value), unless
+// BUILD_VERSION happens to be set in the test environment.
+func TestVersionReadsTheRealGitSHA(t *testing.T) {
+	if os.Getenv("BUILD_VERSION") != "" {
+		t.Skip("BUILD_VERSION is set in this environment - gitVersion()'s fallback path isn't being exercised")
+	}
+	c := Load()
+	if matched, _ := regexp.MatchString(`^[0-9a-f]{7,40}$`, c.Version); !matched {
+		t.Fatalf("expected a real git short SHA, got %q - is this test running inside a git checkout with git on PATH?", c.Version)
+	}
+}
 
 func TestValidatePassesOutsideProduction(t *testing.T) {
 	c := Load()
