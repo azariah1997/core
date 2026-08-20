@@ -36,21 +36,23 @@ func RegisterRoutes(mux *http.ServeMux, svc *Service, newCore CoreFactory, newPr
 	mux.Handle("POST /v1/pulse/interactions", requireUser(createHandler(svc, newCore)))
 	mux.Handle("POST /v1/pulse/interactions/{id}/start", requireUser(startHandler(svc, newPresence)))
 	mux.Handle("POST /v1/pulse/interactions/{id}/stop", requireUser(stopHandler(svc, newNotifier)))
+	mux.Handle("POST /v1/pulse/interactions/{id}/pulse-back", requireUser(pulseBackHandler(svc, newCore, newPresence, newNotifier)))
 	mux.Handle("GET /v1/pulse/interactions/{id}", requireUser(getHandler(svc)))
 	mux.Handle("GET /v1/pulse/interactions", requireUser(listMineHandler(svc)))
 }
 
 type interactionResponse struct {
-	ID           string  `json:"id"`
-	Type         string  `json:"type"`
-	OtherUserID  string  `json:"otherUserId"`
-	Role         string  `json:"role"` // "sender" or "receiver", from the caller's perspective
-	Status       string  `json:"status"`
-	DeliveryMode string  `json:"deliveryMode"`
-	StartedAt    *string `json:"startedAt,omitempty"`
-	EndedAt      *string `json:"endedAt,omitempty"`
-	DurationMs   *int    `json:"durationMs,omitempty"`
-	CreatedAt    string  `json:"createdAt"`
+	ID             string  `json:"id"`
+	Type           string  `json:"type"`
+	OtherUserID    string  `json:"otherUserId"`
+	Role           string  `json:"role"` // "sender" or "receiver", from the caller's perspective
+	Status         string  `json:"status"`
+	DeliveryMode   string  `json:"deliveryMode"`
+	InResponseToID string  `json:"inResponseToId,omitempty"`
+	StartedAt      *string `json:"startedAt,omitempty"`
+	EndedAt        *string `json:"endedAt,omitempty"`
+	DurationMs     *int    `json:"durationMs,omitempty"`
+	CreatedAt      string  `json:"createdAt"`
 }
 
 func toInteractionResponse(callerID string, i Interaction) interactionResponse {
@@ -62,6 +64,9 @@ func toInteractionResponse(callerID string, i Interaction) interactionResponse {
 		ID: i.ID, Type: string(i.Type), OtherUserID: i.otherUser(callerID), Role: role,
 		Status: string(i.Status), DeliveryMode: string(i.DeliveryMode), DurationMs: i.DurationMs,
 		CreatedAt: i.CreatedAt.UTC().Format(timeFormat),
+	}
+	if i.InResponseToID != nil {
+		resp.InResponseToID = *i.InResponseToID
 	}
 	if i.StartedAt != nil {
 		s := i.StartedAt.UTC().Format(timeFormat)
@@ -143,6 +148,37 @@ func stopHandler(svc *Service, newNotifier NotifierFactory) http.HandlerFunc {
 			return
 		}
 		httpx.JSON(w, http.StatusOK, toInteractionResponse(callerID, i))
+	}
+}
+
+// pulseBackHandler needs all three per-caller resources
+// (createHandler+startHandler+stopHandler's, combined) since PulseBack
+// internally calls Create, Start, and Stop in sequence - one API call
+// for the caller, matching spec §17's "faster than opening a messaging
+// interface."
+func pulseBackHandler(svc *Service, newCore CoreFactory, newPresence PresenceFactory, newNotifier NotifierFactory) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		callerID, ok := pulseauth.FromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller missing from context"))
+			return
+		}
+		client, ok := pulseauth.ClientFromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "core client missing from context"))
+			return
+		}
+		token, ok := pulseauth.TokenFromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller token missing from context"))
+			return
+		}
+		i, err := svc.PulseBack(r.Context(), newCore(client), newPresence(token), newNotifier(client), callerID, r.PathValue("id"))
+		if err != nil {
+			writeDomainError(w, r, err)
+			return
+		}
+		httpx.JSON(w, http.StatusCreated, toInteractionResponse(callerID, i))
 	}
 }
 

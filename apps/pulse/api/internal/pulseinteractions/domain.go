@@ -57,17 +57,20 @@ const (
 )
 
 type Interaction struct {
-	ID           string
-	Type         Type
-	SenderID     string
-	ReceiverID   string
-	StartedAt    *time.Time
-	EndedAt      *time.Time
-	DurationMs   *int
-	DeliveryMode DeliveryMode
-	Status       Status
-	CreatedAt    time.Time
-	UpdatedAt    time.Time
+	ID         string
+	Type       Type
+	SenderID   string
+	ReceiverID string
+	StartedAt  *time.Time
+	EndedAt    *time.Time
+	DurationMs *int
+	// InResponseToID links a Pulse Back (spec §17) to the original
+	// interaction it's reciprocating - nil for an ordinary Pulse.
+	InResponseToID *string
+	DeliveryMode   DeliveryMode
+	Status         Status
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
 func (i Interaction) otherUser(callerID string) string {
@@ -180,6 +183,11 @@ type Repository interface {
 type CreateInput struct {
 	ReceiverID      string
 	ClientRequestID string
+	// InResponseToID is set internally by PulseBack - never accepted
+	// from a client request body, so a caller can't forge a fake
+	// reciprocation link (see http.go: only PulseBack's own handler
+	// sets this, createHandler never reads it from the request).
+	InResponseToID string
 }
 
 func (in CreateInput) Validate() error {

@@ -229,8 +229,9 @@ func TestFullLiveRoundTripComputesServerDurationAndNotifies(t *testing.T) {
 
 	analytics.mu.Lock()
 	defer analytics.mu.Unlock()
-	if len(analytics.tracks) != 1 || analytics.tracks[0] != "pulse_completed:caller-1" {
-		t.Fatalf("expected exactly one pulse_completed analytics event, got %v", analytics.tracks)
+	wantTracks := []string{"pulse_started:caller-1", "pulse_completed:caller-1"}
+	if len(analytics.tracks) != len(wantTracks) || analytics.tracks[0] != wantTracks[0] || analytics.tracks[1] != wantTracks[1] {
+		t.Fatalf("expected pulse_started then pulse_completed analytics events, got %v", analytics.tracks)
 	}
 }
 
@@ -324,6 +325,88 @@ func TestAFailedPushNotificationDoesNotFailStop(t *testing.T) {
 	if completed.Status != pulseinteractions.StatusCompleted {
 		t.Fatalf("expected completed status, got %v", completed.Status)
 	}
+}
+
+func TestPulseBackRequiresACompletedOriginal(t *testing.T) {
+	svc := newService(&fakeRealtime{}, &fakeAnalytics{}, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+
+	original, err := svc.Create(context.Background(), core, "caller-1", pulseinteractions.CreateInput{ReceiverID: "user-2"})
+	if err != nil {
+		t.Fatalf("create original: %v", err)
+	}
+	// Still just CREATED - never started, so there's nothing to respond to yet.
+	if _, err := svc.PulseBack(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, "user-2", original.ID); !errors.Is(err, pulseinteractions.ErrInvalidTransition) {
+		t.Fatalf("expected ErrInvalidTransition for an incomplete original, got %v", err)
+	}
+}
+
+func TestOnlyTheOriginalReceiverMayPulseBack(t *testing.T) {
+	svc := newService(&fakeRealtime{}, &fakeAnalytics{}, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+
+	original, err := completePulse(svc, core, "caller-1", "user-2")
+	if err != nil {
+		t.Fatalf("complete original: %v", err)
+	}
+	// A stranger, not the real receiver (user-2), tries to Pulse Back.
+	if _, err := svc.PulseBack(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, "stranger", original.ID); !errors.Is(err, pulseinteractions.ErrForbidden) {
+		t.Fatalf("expected ErrForbidden, got %v", err)
+	}
+}
+
+func TestPulseBackCreatesAReciprocalInteractionLinkedToTheOriginal(t *testing.T) {
+	realtime := &fakeRealtime{}
+	analytics := &fakeAnalytics{}
+	svc := newService(realtime, analytics, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+
+	original, err := completePulse(svc, core, "caller-1", "user-2")
+	if err != nil {
+		t.Fatalf("complete original: %v", err)
+	}
+
+	back, err := svc.PulseBack(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, "user-2", original.ID)
+	if err != nil {
+		t.Fatalf("pulse back: %v", err)
+	}
+	if back.SenderID != "user-2" || back.ReceiverID != "caller-1" {
+		t.Fatalf("expected the reciprocal direction (user-2 -> caller-1), got sender=%s receiver=%s", back.SenderID, back.ReceiverID)
+	}
+	if back.InResponseToID == nil || *back.InResponseToID != original.ID {
+		t.Fatalf("expected InResponseToID to link back to the original, got %v", back.InResponseToID)
+	}
+	if back.Status != pulseinteractions.StatusCompleted {
+		t.Fatalf("expected PulseBack to complete the whole create+start+stop cycle in one call, got status %v", back.Status)
+	}
+
+	analytics.mu.Lock()
+	defer analytics.mu.Unlock()
+	found := false
+	for _, track := range analytics.tracks {
+		if track == "pulse_back:user-2" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a pulse_back analytics event attributed to the responder, got %v", analytics.tracks)
+	}
+}
+
+// completePulse drives a full Create+Start+Stop cycle - the setup every
+// PulseBack test needs, since you can only respond to a completed Pulse.
+func completePulse(svc *pulseinteractions.Service, core *fakeCoreRelationships, senderID, receiverID string) (pulseinteractions.Interaction, error) {
+	created, err := svc.Create(context.Background(), core, senderID, pulseinteractions.CreateInput{ReceiverID: receiverID})
+	if err != nil {
+		return pulseinteractions.Interaction{}, err
+	}
+	if _, err := svc.Start(context.Background(), fakePresence{online: true}, senderID, created.ID); err != nil {
+		return pulseinteractions.Interaction{}, err
+	}
+	return svc.Stop(context.Background(), &fakeNotifier{}, senderID, created.ID)
 }
 
 func TestGetForbidsAStrangerFromReadingAnInteraction(t *testing.T) {

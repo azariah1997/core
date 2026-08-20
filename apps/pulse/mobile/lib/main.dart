@@ -149,6 +149,7 @@ class _HomeShellState extends State<HomeShell> {
   RealtimeConn? _conn;
   StreamSubscription<RealtimeMessage>? _sub;
   String? _incomingBanner;
+  String? _incomingInteractionId;
 
   @override
   void initState() {
@@ -181,14 +182,46 @@ class _HomeShellState extends State<HomeShell> {
     switch (m.type) {
       case 'pulse.started':
         _haptics.playPulseStart();
-        setState(() => _incomingBanner = 'Someone is pulsing you 💗');
+        final data = m.data;
+        final interactionId = data is Map ? data['interactionId'] as String? : null;
+        setState(() {
+          _incomingBanner = 'Someone is pulsing you 💗';
+          _incomingInteractionId = interactionId;
+        });
         break;
       case 'pulse.stopped':
         _haptics.playPulseStop();
-        setState(() => _incomingBanner = null);
+        // Keep the banner (and Pulse Back option) up briefly after the
+        // sender releases - product spec §17's whole point is that
+        // responding stays fast and available right after feeling it,
+        // not gone the instant the gesture itself ends.
+        Future.delayed(const Duration(seconds: 8), () {
+          if (mounted) setState(() => _incomingBanner = null);
+        });
         break;
     }
   }
+
+  Future<void> _pulseBack() async {
+    final id = _incomingInteractionId;
+    if (id == null) return;
+    setState(() => _incomingBanner = 'Pulsing back…');
+    try {
+      await widget.pulseApi.pulseBack(id);
+      _haptics.playPulseStart();
+      if (!mounted) return;
+      setState(() {
+        _incomingBanner = 'Pulsed back 💗';
+        _incomingInteractionId = null;
+      });
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) setState(() => _incomingBanner = null);
+      });
+    } catch (err) {
+      if (mounted) setState(() => _incomingBanner = 'Could not Pulse Back: $err');
+    }
+  }
+
 
   @override
   void dispose() {
@@ -211,11 +244,9 @@ class _HomeShellState extends State<HomeShell> {
         child: Column(
           children: [
             if (_incomingBanner != null)
-              Container(
-                width: double.infinity,
-                color: Theme.of(context).colorScheme.primary,
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Text(_incomingBanner!, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+              _IncomingPulseBanner(
+                text: _incomingBanner!,
+                onPulseBack: _incomingInteractionId != null ? _pulseBack : null,
               ),
             Expanded(child: pages[_tab]),
           ],
@@ -234,6 +265,40 @@ class _HomeShellState extends State<HomeShell> {
       ),
     );
   }
+}
+
+/// The incoming-Pulse banner, including the Pulse Back button (product
+/// spec §17) - a plain, isolated widget deliberately separate from
+/// HomeShell's own realtime-connection state, so it's testable without
+/// a real WebSocket connection (this test sandbox can't dial one - see
+/// _HomeShellState._connectRealtime's own doc comment).
+class _IncomingPulseBanner extends StatelessWidget {
+  final String text;
+  final VoidCallback? onPulseBack;
+  const _IncomingPulseBanner({required this.text, this.onPulseBack});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: Theme.of(context).colorScheme.primary,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(text, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            ),
+            if (onPulseBack != null) ...[
+              const SizedBox(width: 10),
+              TextButton(
+                onPressed: onPulseBack,
+                style: TextButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.2), foregroundColor: Colors.white),
+                child: const Text('Pulse Back'),
+              ),
+            ],
+          ],
+        ),
+      );
 }
 
 /// The "hold to Pulse" main screen (product spec §13, Phase 4). Press

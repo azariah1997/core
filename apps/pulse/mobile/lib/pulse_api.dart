@@ -58,6 +58,16 @@ class PulseApi {
         '/v1/pulse/interactions/$interactionId/stop',
         decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
       );
+
+  /// Pulse Back (product spec §17) - one call, faster than opening a
+  /// messaging interface. interactionId is the *original* Pulse being
+  /// responded to; the server creates, starts, and stops the reciprocal
+  /// Pulse itself and returns it already completed.
+  Future<PulseInteraction> pulseBack(String interactionId) => _client.request(
+        'POST',
+        '/v1/pulse/interactions/$interactionId/pulse-back',
+        decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
+      );
 }
 
 class PulseConnection {

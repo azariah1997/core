@@ -199,7 +199,7 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">6 / 18</div><div class="label">Phases complete (Audit → Push Fallback)</div></div>
+    <div class="stat-pill"><div class="num">7 / 18</div><div class="label">Phases complete (Audit → Pulse Back)</div></div>
     <div class="stat-pill"><div class="num">4 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
@@ -674,9 +674,16 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">6</span>Pulse Back <span class="badge pending">Pending</span></h3>
-    <p>Rapid reciprocal interaction, faster than opening messaging. Measures Pulse-received → Pulse-Back latency.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">6</span>Pulse Back <span class="badge done">Done</span></h3>
+    <p><code>POST /v1/pulse/interactions/{id}/pulse-back</code> - one API call, reusing Create+Start+Stop directly rather than duplicating their authorization/rate-limit/presence logic, so a Pulse Back gets every real guarantee an ordinary Pulse does for free. Duration is never fabricated - a real, typically single-digit-millisecond server-measured gap from two back-to-back timestamped calls, not a pretend "quick tap" value. Live-validated end to end: a real Pulse → real Pulse Back round trip confirming the reciprocal direction, the durable link back to the original, and a real <code>responseLatencyMs</code> analytics measurement (41ms in the live run) - plus a real 403 when a non-receiver tries to respond. Mobile gained a real "Pulse Back" button on the incoming-Pulse banner.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>One-call reciprocal Pulse, linked to the original via <code>in_response_to_id</code></li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Only the real receiver of a completed original may respond</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Fresh presence check for the reciprocal direction - independent of the original's own delivery mode</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div><code>pulse_back</code> analytics event with real response-latency measurement (spec §80)</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mobile Pulse Back button, wired to the real API</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">

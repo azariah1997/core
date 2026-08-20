@@ -76,6 +76,9 @@ func (s *Service) Create(ctx context.Context, core CoreRelationships, callerID s
 		ID: uuid.NewString(), Type: TypePulse, SenderID: callerID, ReceiverID: in.ReceiverID,
 		Status: StatusCreated, CreatedAt: now, UpdatedAt: now,
 	}
+	if in.InResponseToID != "" {
+		i.InResponseToID = &in.InResponseToID
+	}
 	return s.repo.Create(ctx, i, in.ClientRequestID)
 }
 
@@ -115,6 +118,9 @@ func (s *Service) Start(ctx context.Context, presence Presence, callerID, id str
 			"interactionId": started.ID, "senderId": started.SenderID, "startedAt": now.Format(time.RFC3339Nano),
 		})
 	}
+	_ = s.analytics.Track(ctx, "pulse_started", started.SenderID, map[string]any{
+		"interactionId": started.ID, "receiverId": started.ReceiverID, "deliveryMode": string(deliveryMode),
+	})
 	return started, nil
 }
 
@@ -156,6 +162,54 @@ func (s *Service) Stop(ctx context.Context, notifier Notifier, callerID, id stri
 		_ = notifier.NotifyPulseReceived(ctx, completed.ReceiverID, durationMs)
 	}
 	s.trackCompleted(ctx, completed, durationMs)
+	return completed, nil
+}
+
+// PulseBack is the fundamental social loop (spec §17): "A → Pulse, B →
+// feels it, B → Pulse Back, A → feels response" - faster than opening a
+// messaging interface, so this is one API call, not three. Internally
+// it's exactly a normal Create+Start+Stop targeting the original
+// sender, linked via InResponseToID - reusing those three methods
+// directly (rather than duplicating their authorization, rate-limiting,
+// and presence-check logic) means a Pulse Back gets every real
+// guarantee an ordinary Pulse does for free: connection/block checks,
+// the same rate limit, a fresh presence check for whether *this*
+// direction is live or push right now (independent of what the
+// original Pulse's delivery mode was).
+func (s *Service) PulseBack(ctx context.Context, core CoreRelationships, presence Presence, notifier Notifier, callerID, originalID string) (Interaction, error) {
+	original, err := s.repo.Get(ctx, originalID)
+	if err != nil {
+		return Interaction{}, err
+	}
+	if original.ReceiverID != callerID {
+		return Interaction{}, ErrForbidden
+	}
+	if original.Status != StatusCompleted {
+		return Interaction{}, ErrInvalidTransition
+	}
+
+	created, err := s.Create(ctx, core, callerID, CreateInput{ReceiverID: original.SenderID, InResponseToID: original.ID})
+	if err != nil {
+		return Interaction{}, err
+	}
+	if _, err := s.Start(ctx, presence, callerID, created.ID); err != nil {
+		return Interaction{}, err
+	}
+	completed, err := s.Stop(ctx, notifier, callerID, created.ID)
+	if err != nil {
+		return Interaction{}, err
+	}
+
+	// Measure "Pulse received -> Pulse Back" (spec §6's own named
+	// metric): the gap between when the original Pulse actually reached
+	// this responder (its EndedAt - the moment the felt gesture
+	// finished) and the moment they finished responding.
+	if original.EndedAt != nil {
+		responseLatencyMs := int(completed.CreatedAt.Sub(*original.EndedAt).Milliseconds())
+		_ = s.analytics.Track(ctx, "pulse_back", callerID, map[string]any{
+			"interactionId": completed.ID, "inResponseToId": original.ID, "responseLatencyMs": responseLatencyMs,
+		})
+	}
 	return completed, nil
 }
 

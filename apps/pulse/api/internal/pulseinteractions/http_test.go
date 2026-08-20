@@ -188,6 +188,78 @@ func TestOfflineReceiverGetsAPushNotificationThroughTheRealRouter(t *testing.T) 
 	}
 }
 
+func TestPulseBackHandlerRoundTripsThroughTheRealRouter(t *testing.T) {
+	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
+	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)
+
+	senderMux := http.NewServeMux()
+	pulseinteractions.RegisterRoutes(senderMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+
+	createRR := httptest.NewRecorder()
+	senderMux.ServeHTTP(createRR, httptest.NewRequest("POST", "/v1/pulse/interactions", strings.NewReader(`{"type":"pulse","receiverId":"user-2"}`)))
+	var original struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(createRR.Body.Bytes(), &original)
+	senderMux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/pulse/interactions/"+original.ID+"/start", nil))
+	stopRR := httptest.NewRecorder()
+	senderMux.ServeHTTP(stopRR, httptest.NewRequest("POST", "/v1/pulse/interactions/"+original.ID+"/stop", nil))
+	if stopRR.Code != http.StatusOK {
+		t.Fatalf("expected the original Pulse to complete, got %d: %s", stopRR.Code, stopRR.Body.String())
+	}
+
+	// user-2 (the real receiver) Pulses Back - one API call.
+	receiverMux := http.NewServeMux()
+	pulseinteractions.RegisterRoutes(receiverMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("user-2", server.URL))
+
+	backRR := httptest.NewRecorder()
+	receiverMux.ServeHTTP(backRR, httptest.NewRequest("POST", "/v1/pulse/interactions/"+original.ID+"/pulse-back", nil))
+	if backRR.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", backRR.Code, backRR.Body.String())
+	}
+	var back struct {
+		Status         string `json:"status"`
+		Role           string `json:"role"`
+		OtherUserID    string `json:"otherUserId"`
+		InResponseToID string `json:"inResponseToId"`
+	}
+	json.Unmarshal(backRR.Body.Bytes(), &back)
+	if back.Status != "completed" {
+		t.Fatalf("expected PulseBack to complete in one call, got %+v", back)
+	}
+	if back.Role != "sender" || back.OtherUserID != "caller-1" {
+		t.Fatalf("expected user-2 to be the sender of the reciprocal Pulse back to caller-1, got %+v", back)
+	}
+	if back.InResponseToID != original.ID {
+		t.Fatalf("expected inResponseToId to link back to the original, got %+v", back)
+	}
+}
+
+func TestPulseBackRejectsAnIncompleteOriginalThroughTheRealRouter(t *testing.T) {
+	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
+	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)
+
+	senderMux := http.NewServeMux()
+	pulseinteractions.RegisterRoutes(senderMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	createRR := httptest.NewRecorder()
+	senderMux.ServeHTTP(createRR, httptest.NewRequest("POST", "/v1/pulse/interactions", strings.NewReader(`{"type":"pulse","receiverId":"user-2"}`)))
+	var created struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(createRR.Body.Bytes(), &created)
+	// Deliberately never started/stopped - still just CREATED.
+
+	// The real receiver (user-2) tries to Pulse Back on an interaction
+	// that never actually completed.
+	receiverMux := http.NewServeMux()
+	pulseinteractions.RegisterRoutes(receiverMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("user-2", server.URL))
+	rr := httptest.NewRecorder()
+	receiverMux.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/pulse/interactions/"+created.ID+"/pulse-back", nil))
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("expected 409 for an incomplete original, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestStopBeforeStartReturnsConflict(t *testing.T) {
 	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
 	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)

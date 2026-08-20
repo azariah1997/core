@@ -22,12 +22,12 @@ func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const interactionColumns = "id, type, sender_id, receiver_id, started_at, ended_at, duration_ms, delivery_mode, status, created_at, updated_at"
+const interactionColumns = "id, type, sender_id, receiver_id, started_at, ended_at, duration_ms, in_response_to_id, delivery_mode, status, created_at, updated_at"
 
 func scanInteraction(row pgx.Row) (pulseinteractions.Interaction, error) {
 	var i pulseinteractions.Interaction
 	var typ, deliveryMode, status string
-	err := row.Scan(&i.ID, &typ, &i.SenderID, &i.ReceiverID, &i.StartedAt, &i.EndedAt, &i.DurationMs, &deliveryMode, &status, &i.CreatedAt, &i.UpdatedAt)
+	err := row.Scan(&i.ID, &typ, &i.SenderID, &i.ReceiverID, &i.StartedAt, &i.EndedAt, &i.DurationMs, &i.InResponseToID, &deliveryMode, &status, &i.CreatedAt, &i.UpdatedAt)
 	if err != nil {
 		return pulseinteractions.Interaction{}, err
 	}
@@ -54,10 +54,10 @@ func (r *Repository) Create(ctx context.Context, i pulseinteractions.Interaction
 		crid = &clientRequestID
 	}
 	row := r.pool.QueryRow(ctx, `
-		INSERT INTO interactions (id, type, sender_id, receiver_id, delivery_mode, status, client_request_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
+		INSERT INTO interactions (id, type, sender_id, receiver_id, delivery_mode, status, client_request_id, in_response_to_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
 		RETURNING `+interactionColumns,
-		i.ID, string(i.Type), i.SenderID, i.ReceiverID, string(i.DeliveryMode), string(i.Status), crid, i.CreatedAt)
+		i.ID, string(i.Type), i.SenderID, i.ReceiverID, string(i.DeliveryMode), string(i.Status), crid, i.InResponseToID, i.CreatedAt)
 	created, err := scanInteraction(row)
 	if err != nil {
 		var pgErr *pgconn.PgError
