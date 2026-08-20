@@ -104,6 +104,7 @@ func main() {
 	mux.HandleFunc("GET /healthz", health.Health(serviceName, cfg.Version, dependencyChecks))
 	mux.Handle("GET /metrics", metrics.Handler())
 	mux.Handle("GET /ws", wsAuthMiddleware(verifier, resolver)(ws.NewHandler(realtimeHub, presenceTracker, logger)))
+	mux.Handle("GET /v1/presence/{userId}", httpAuthMiddleware(verifier, resolver)(presenceHandler(presenceTracker)))
 
 	handler := otelx.Wrap(serviceName, metrics.Middleware(serviceName, mux, correlation.Middleware(mux)))
 	srv := &http.Server{Addr: cfg.RealtimeAddr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
