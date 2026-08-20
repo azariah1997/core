@@ -1,0 +1,7 @@
+name: live-touch
+owner: pulse
+lifecycle: planned
+dependencies:
+  - bond
+  - pulse-connections
+  - pulse-interactions

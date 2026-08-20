@@ -1,0 +1,5 @@
+name: pulse-profile
+owner: pulse
+lifecycle: planned
+dependencies:
+  - core:users

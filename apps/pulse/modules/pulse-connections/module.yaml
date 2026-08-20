@@ -1,0 +1,7 @@
+name: pulse-connections
+owner: pulse
+lifecycle: planned
+dependencies:
+  - core:relationships
+  - core:groups
+  - pulse-profile

@@ -1,0 +1,5 @@
+name: moments
+owner: pulse
+lifecycle: planned
+dependencies:
+  - pulse-interactions

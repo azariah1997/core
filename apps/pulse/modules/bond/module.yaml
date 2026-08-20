@@ -1,0 +1,6 @@
+name: bond
+owner: pulse
+lifecycle: planned
+dependencies:
+  - core:relationships
+  - pulse-connections

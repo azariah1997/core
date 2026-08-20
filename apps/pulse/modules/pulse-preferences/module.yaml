@@ -1,0 +1,6 @@
+name: pulse-preferences
+owner: pulse
+lifecycle: planned
+dependencies:
+  - core:notifications
+  - pulse-profile

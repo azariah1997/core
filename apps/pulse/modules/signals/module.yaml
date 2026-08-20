@@ -1,0 +1,6 @@
+name: signals
+owner: pulse
+lifecycle: planned
+dependencies:
+  - pulse-connections
+  - bond

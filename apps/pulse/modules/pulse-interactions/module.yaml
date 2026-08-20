@@ -1,0 +1,9 @@
+name: pulse-interactions
+owner: pulse
+lifecycle: planned
+dependencies:
+  - core:relationships
+  - core:notifications
+  - core:devices
+  - pulse-connections
+  - bond

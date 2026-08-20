@@ -1,0 +1,777 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pulse — Control Room</title>
+<style>
+  :root {
+    --bg: #faf7f8;
+    --panel: #ffffff;
+    --text: #241a1d;
+    --muted: #8a7478;
+    --border: #f0e2e5;
+    --accent: #e11d5e;
+    --accent-light: #fdeef3;
+    --accent-dark: #a80f45;
+    --ok: #059669;
+    --pending: #b45309;
+    --pending-bg: #fef3e2;
+    --ok-bg: #e7f6ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+  header {
+    background: linear-gradient(135deg, #3a0e1f, #7a1338 55%, #e11d5e);
+    color: #fff;
+    padding: 34px 28px 26px;
+  }
+  header .tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    background: rgba(255,255,255,.16);
+    padding: 4px 10px;
+    border-radius: 999px;
+    margin-bottom: 10px;
+  }
+  header h1 { margin: 0 0 6px; font-size: 30px; font-weight: 800; }
+  header p.sub { margin: 0; color: #f9d7e3; font-size: 15px; max-width: 720px; }
+  header p.motto { margin: 14px 0 0; font-size: 17px; font-style: italic; color: #ffe3ee; }
+  .stats-bar {
+    display: flex; gap: 14px; flex-wrap: wrap; margin-top: 20px;
+  }
+  .stat-pill {
+    background: rgba(255,255,255,.12);
+    border: 1px solid rgba(255,255,255,.2);
+    border-radius: 10px;
+    padding: 10px 14px;
+    min-width: 140px;
+  }
+  .stat-pill .num { font-size: 20px; font-weight: 800; }
+  .stat-pill .label { font-size: 12px; color: #f5d0dd; margin-top: 2px; }
+
+  nav {
+    display: flex;
+    gap: 4px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    overflow-x: auto;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  nav button {
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 14px 12px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  nav button:hover { color: var(--text); }
+  nav button.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 28px 24px 80px; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .panel h2 { font-size: 22px; margin: 0 0 6px; }
+  .panel > .hint { color: var(--muted); font-size: 13.5px; margin-bottom: 22px; }
+
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 16px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 15.5px; }
+  .card p { margin: 0 0 8px; font-size: 14px; color: #4a3a3e; }
+  .card p:last-child { margin-bottom: 0; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .badge.done { background: var(--ok-bg); color: var(--ok); }
+  .badge.pending { background: var(--pending-bg); color: var(--pending); }
+
+  .flow {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 10px 0;
+  }
+  .flow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 8px 0;
+  }
+  .flow-step .dot {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent-light); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; flex-shrink: 0; margin-top: 1px;
+  }
+  .flow-step .arrow {
+    color: var(--muted); font-size: 13px; margin-left: 11px; padding: 2px 0;
+  }
+  .flow-step .txt { font-size: 14px; }
+  .flow-step .txt b { color: var(--accent-dark); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  thead th {
+    text-align: left; padding: 8px 10px; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td { padding: 9px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tbody tr:hover { background: var(--accent-light); }
+  code {
+    background: #f6eef1; color: var(--accent-dark); padding: 1px 5px;
+    border-radius: 4px; font-size: 12.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  pre {
+    background: #241a1d; color: #f6d6e2; padding: 12px 14px; border-radius: 8px;
+    font-size: 12.5px; overflow-x: auto; line-height: 1.6;
+  }
+  ul.plain { margin: 8px 0; padding-left: 20px; }
+  ul.plain li { margin-bottom: 4px; font-size: 14px; }
+  .principle-list { list-style: none; margin: 0; padding: 0; }
+  .principle-list li {
+    padding: 9px 12px; margin-bottom: 6px; border-radius: 8px;
+    background: var(--accent-light); font-size: 14px; color: var(--accent-dark); font-weight: 600;
+  }
+  .phase-card { border-left: 4px solid var(--border); }
+  .phase-card.done { border-left-color: var(--ok); }
+  .phase-card.pending { border-left-color: var(--pending); }
+  .phase-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 26px; height: 26px; border-radius: 50%; background: var(--accent);
+    color: #fff; font-size: 12px; font-weight: 800; margin-right: 8px;
+  }
+  .todo-list { list-style: none; margin: 10px 0 0; padding: 0; }
+  .todo-list li {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 13.5px; padding: 4px 0; color: #4a3a3e;
+  }
+  .todo-list li .box {
+    width: 14px; height: 14px; border-radius: 4px; border: 2px solid var(--muted);
+    flex-shrink: 0; margin-top: 2px;
+  }
+  .dod-grid { display: grid; grid-template-columns: 1fr; gap: 6px; margin-top: 8px; }
+  .dod-grid .box { width: 15px; height: 15px; border-radius: 4px; border: 2px solid var(--muted); flex-shrink: 0; }
+  .dod-item { display: flex; gap: 8px; align-items: flex-start; font-size: 13.5px; }
+  .risk-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 6px; background: #fee2e2; color: #b91c1c;
+    font-weight: 800; font-size: 12px; margin-right: 8px; flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="tag">Core Platform product · apps/pulse</div>
+  <h1>Pulse — Control Room</h1>
+  <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
+  <p class="motto">"Feel it instead of reading it."</p>
+  <div class="stats-bar">
+    <div class="stat-pill"><div class="num">1 / 18</div><div class="label">Phases complete (Architecture Audit)</div></div>
+    <div class="stat-pill"><div class="num">10</div><div class="label">Pulse domain modules planned</div></div>
+    <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
+    <div class="stat-pill"><div class="num">0</div><div class="label">Feature code lines shipped (by design — see §106)</div></div>
+    <div class="stat-pill"><div class="num">Flutter</div><div class="label">Mobile — apps/pulse/mobile</div></div>
+  </div>
+</header>
+
+<nav id="tabs"></nav>
+
+<script>
+const sections = [
+  { id: "overview", label: "Overview" },
+  { id: "principles", label: "Principles" },
+  { id: "people", label: "People &amp; Relationships" },
+  { id: "flows", label: "User Flows" },
+  { id: "modules", label: "Modules &amp; Core Map" },
+  { id: "contracts", label: "API &amp; Events" },
+  { id: "roadmap", label: "Roadmap &amp; Todo" },
+  { id: "dod", label: "Definition of Done" },
+  { id: "risks", label: "Risks" },
+];
+
+const tabsEl = document.getElementById("tabs");
+sections.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.textContent = s.label.replace("&amp;", "&");
+  b.dataset.target = s.id;
+  if (i === 0) b.classList.add("active");
+  b.onclick = () => {
+    document.querySelectorAll("nav button").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    document.getElementById(s.id).classList.add("active");
+  };
+  tabsEl.appendChild(b);
+});
+</script>
+
+<main id="panels">
+
+<!-- OVERVIEW -->
+<section class="panel active" id="overview">
+  <h2>Product Vision</h2>
+  <p class="hint">The purpose statement and positioning, verbatim from the product spec (<code>apps/pulse/docs/PRODUCT_SPEC.md</code> §2, §5).</p>
+
+  <div class="card">
+    <h3>What Pulse is</h3>
+    <p><b>Allow people who care about each other to communicate presence, emotion and attention without needing to type or speak.</b> Pulse is not another WhatsApp, Instagram, Snapchat or conventional messaging app — text is not the centre of the product. The product centres around <b>touch, presence, mood, signals, haptics, relationships, shared moments</b>. The primary interaction is physical/emotional, not textual.</p>
+  </div>
+
+  <div class="grid3">
+    <div class="card">
+      <h3>PEOPLE</h3>
+      <p>Partner (Bond)<br>Friends<br>Close Friends<br>Circles</p>
+    </div>
+    <div class="card">
+      <h3>STATE</h3>
+      <p>Today's Mood<br>Presence<br>Availability</p>
+    </div>
+    <div class="card">
+      <h3>INTERACTION</h3>
+      <p>Pulse / Pulse Back<br>Knock<br>Live Touch<br>Custom Signals</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Positioning</h3>
+    <p>Not narrowly "I miss you app" — that was only the starting interaction. The broader product: <b>a private non-verbal communication network for the people who matter to you.</b></p>
+    <p style="font-style:italic;color:var(--accent-dark)">"Feel someone thinking about you." · "Say something without saying anything." · "A social network you feel instead of read."</p>
+  </div>
+
+  <div class="card">
+    <h3>Architectural dependency (never inverted)</h3>
+    <pre>Pulse
+  ↓
+Core Platform</pre>
+    <p>Core must never acquire a Pulse-specific concept. Pulse consumes Core APIs/SDKs/events — it never reimplements identity, relationships, realtime, notifications, or trust &amp; safety.</p>
+  </div>
+
+  <div class="card">
+    <h3>North-star metric candidate</h3>
+    <p><b>Weekly Connected Pairs with Reciprocal Interaction</b> — two connected people who both intentionally interacted with each other during the week. More meaningful than raw app opens. The critical product question: does Pulse remain emotionally useful after the novelty disappears?</p>
+  </div>
+</section>
+
+<!-- PRINCIPLES -->
+<section class="panel" id="principles">
+  <h2>Product Principles</h2>
+  <p class="hint">From product spec §105 — "Product Principles That Must Never Be Lost." Every phase of implementation is checked against these before being called done.</p>
+  <ul class="principle-list">
+    <li>Pulse is non-verbal first.</li>
+    <li>Touch is more important than text.</li>
+    <li>Emotion is more important than engagement metrics.</li>
+    <li>The product should feel private.</li>
+    <li>Partner is special, but Pulse is not couples-only.</li>
+    <li>A user can have one Partner and multiple Friends.</li>
+    <li>Today's Mood is passive emotional presence.</li>
+    <li>Pulse is active emotional presence.</li>
+    <li>Live Touch is synchronous presence.</li>
+    <li>Knock is lightweight attention.</li>
+    <li>Custom Signals become a private language.</li>
+    <li>Do not create surveillance.</li>
+    <li>Do not create relationship pressure.</li>
+    <li>Do not create manipulative streaks.</li>
+    <li>Do not become another messaging app.</li>
+    <li>Core Platform owns generic infrastructure. Pulse owns Pulse-specific product behaviour.</li>
+    <li>Every interaction must respect consent, permissions, blocking and privacy.</li>
+    <li>The application must remain usable globally.</li>
+    <li>iOS and Android platform limitations must be handled honestly.</li>
+    <li>Realtime behaviour must degrade gracefully to notifications.</li>
+    <li>Everything important must be observable.</li>
+    <li>Every AI change must remain understandable and reviewable.</li>
+  </ul>
+
+  <div class="card" style="margin-top:16px">
+    <h3>No streak pressure (spec §32)</h3>
+    <p>Never: <i style="color:#b91c1c">"You lost your 148-day love streak!"</i></p>
+    <p>Instead, if statistics are shown at all: <i style="color:var(--ok)">"12 little moments together this week."</i> Pulse creates closeness, not obligation.</p>
+  </div>
+</section>
+
+<!-- PEOPLE -->
+<section class="panel" id="people">
+  <h2>People &amp; Relationships</h2>
+  <p class="hint">Spec §6-11. A person can have 0 or 1 romantic Bond, plus multiple Close Friends, Friends, and custom Circles — Pulse is not exclusively for couples.</p>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Partner Bond <span class="badge pending">0 or 1</span></h3>
+      <p>One optional, explicitly mutual romantic connection. Never established automatically. States: <code>PENDING → ACTIVE → ENDED</code>, or <code>BLOCKED</code>.</p>
+      <p>Unlocks: Live Touch, Long Pulse, private touch language, intimate mood visibility, shared moments, special animations, future wearable interactions.</p>
+    </div>
+    <div class="card">
+      <h3>Friends <span class="badge pending">many</span></h3>
+      <p>Regular connections. Can participate in less-intimate interactions: Pulse, Knock, Mood, Reactions, Circles. Exact permissions are Pulse product policy.</p>
+    </div>
+    <div class="card">
+      <h3>Close Friends <span class="badge pending">many</span></h3>
+      <p>A classified subset of Friends who may receive more private moods, additional signal types, closer presence interactions. Not everyone sees everything.</p>
+    </div>
+    <div class="card">
+      <h3>Circles <span class="badge pending">custom</span></h3>
+      <p>Custom groups (Closest Friends, Family, University, Work, Gaming, ...). Membership is private by default. Primarily controls mood audience and future group interactions.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Relationship terminology</h3>
+    <p><code>Bond</code> (romantic) · <code>Close Friend</code> · <code>Friend</code> · <code>Circle</code> · <code>Connection</code> (generic term for any of the above)</p>
+  </div>
+</section>
+
+<!-- FLOWS -->
+<section class="panel" id="flows">
+  <h2>User Flows</h2>
+  <p class="hint">Every primary interaction the product supports, as an ordered step sequence. Source: product spec §11, §13-21, §22-27, §50.</p>
+
+  <div class="card">
+    <h3>Onboarding</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">1</div><div class="txt">Welcome</div></div>
+      <div class="flow-step"><div class="dot">2</div><div class="txt">Create / sign into account <b>(Core Identity — Keycloak)</b></div></div>
+      <div class="flow-step"><div class="dot">3</div><div class="txt">Choose username / profile <b>(pulse-profile)</b></div></div>
+      <div class="flow-step"><div class="dot">4</div><div class="txt">Find / connect someone <b>(pulse-connections)</b></div></div>
+      <div class="flow-step"><div class="dot">5</div><div class="txt">Send first Pulse — this should happen as early as possible</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Connection request</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">1</div><div class="txt">User A sends a request (username / QR / invite link / share code)</div></div>
+      <div class="flow-step"><div class="dot">2</div><div class="txt">User B receives the request</div></div>
+      <div class="flow-step"><div class="dot">3</div><div class="txt">Accept / Decline</div></div>
+      <div class="flow-step"><div class="dot">4</div><div class="txt">Connection becomes active <b>(Core relationships.Status = active)</b></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Partner Bond request</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">1</div><div class="txt">Existing active connection required</div></div>
+      <div class="flow-step"><div class="dot">2</div><div class="txt">Request Bond</div></div>
+      <div class="flow-step"><div class="dot">3</div><div class="txt">Explicit confirmation from the other person — never automatic</div></div>
+      <div class="flow-step"><div class="dot">4</div><div class="txt">Active Bond <b>(one-active-Bond invariant enforced server-side)</b></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Sending a Pulse — Live (receiver online, foreground, realtime session available)</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">1</div><div class="txt">Sender selects a connected person, presses and holds</div></div>
+      <div class="flow-step"><div class="dot">2</div><div class="txt"><code>PulseStart</code> sent to server (not a continuous stream)</div></div>
+      <div class="flow-step"><div class="dot">3</div><div class="txt">Server authorizes (connected, not blocked, Bond-gated features checked, rate limit) and relays via <code>hub.PublishToUser</code></div></div>
+      <div class="flow-step"><div class="dot">4</div><div class="txt">Receiver's native haptic starts (<code>HapticEngine.playPulseStart()</code>)</div></div>
+      <div class="flow-step"><div class="dot">5</div><div class="txt">Sender releases → <code>PulseStop</code> sent</div></div>
+      <div class="flow-step"><div class="dot">6</div><div class="txt">Receiver's haptic stops. Server computes/validates the authoritative duration — client-submitted duration is never fully trusted</div></div>
+      <div class="flow-step"><div class="dot">7</div><div class="txt">Durable <code>pulse.completed</code> event recorded asynchronously</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Sending a Pulse — Offline / Background (receiver not available for Live Pulse)</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">1</div><div class="txt">Sender completes the Pulse gesture</div></div>
+      <div class="flow-step"><div class="dot">2</div><div class="txt">Pulse stored (durable, server-authoritative)</div></div>
+      <div class="flow-step"><div class="dot">3</div><div class="txt">Push notification requested through Core <code>notifications.Service.Send</code> — Pulse never calls FCM/APNs directly</div></div>
+      <div class="flow-step"><div class="dot">4</div><div class="txt">Receiver gets a platform-appropriate notification/haptic; the app may reproduce/show the Pulse duration when opened</div></div>
+    </div>
+    <p style="margin-top:10px;color:var(--pending);font-weight:600">iOS and Android background/haptic restrictions differ — never promise continuous remote vibration while backgrounded/locked if the OS doesn't allow it. See Risks.</p>
+  </div>
+
+  <div class="card">
+    <h3>Today's Mood — set, view, respond</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">1</div><div class="txt">User selects a visual/symbol (never a free-text status)</div></div>
+      <div class="flow-step"><div class="dot">2</div><div class="txt">User picks an audience: Partner only / Close Friends / Selected Circles / All Connections / Custom / Private</div></div>
+      <div class="flow-step"><div class="dot">3</div><div class="txt">Mood persists, expires at the user's local day boundary (timezone-correct)</div></div>
+      <div class="flow-step"><div class="dot">4</div><div class="txt">Authorized viewers see the Mood; unauthorized viewers see nothing</div></div>
+      <div class="flow-step"><div class="dot">5</div><div class="txt">Viewer responds non-verbally — Pulse, Knock, Hug signal, Heart signal — no obligation to explain, no text reply required</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Live Touch session</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">1</div><div class="txt">One participant invites the other into a Live Touch session (Bond-gated)</div></div>
+      <div class="flow-step"><div class="dot">2</div><div class="txt">Receiver accepts; both connect to a shared realtime channel (<code>pulse:live-touch:{sessionId}</code>)</div></div>
+      <div class="flow-step"><div class="dot">3</div><div class="txt">Either side touches → remote haptic starts on the other device, bidirectionally, with minimal latency</div></div>
+      <div class="flow-step"><div class="dot">4</div><div class="txt">Touch release → remote haptic stops</div></div>
+      <div class="flow-step"><div class="dot">5</div><div class="txt">Session ends (explicit end or disconnect/timeout) → durable completion recorded, individual touch events are never persisted</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Pulse Back (the fundamental social loop)</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">A</div><div class="txt">A sends a Pulse</div></div>
+      <div class="flow-step"><div class="dot">B</div><div class="txt">B feels it</div></div>
+      <div class="flow-step"><div class="dot">B</div><div class="txt">B sends Pulse Back — faster than opening a messaging interface</div></div>
+      <div class="flow-step"><div class="dot">A</div><div class="txt">A feels the response</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- MODULES -->
+<section class="panel" id="modules">
+  <h2>Modules &amp; Core Capability Map</h2>
+  <p class="hint">Full detail in <code>apps/pulse/docs/ARCHITECTURE_AUDIT.md</code>. Every row below was verified against real Core Platform source in this repository — nothing here was assumed from a module name.</p>
+
+  <div class="card">
+    <h3>Pulse-owned domain modules (new — none implemented yet)</h3>
+    <table>
+      <thead><tr><th>Module</th><th>Owns</th><th>Depends on</th><th>Phase</th></tr></thead>
+      <tbody>
+        <tr><td><code>pulse-profile</code></td><td>Pulse-specific user extension</td><td>Core <code>users</code></td><td>1</td></tr>
+        <tr><td><code>pulse-connections</code></td><td>Friend / Close-Friend classification &amp; permissions</td><td>Core <code>relationships</code>, <code>groups</code></td><td>2</td></tr>
+        <tr><td><code>bond</code></td><td>One-active-Bond invariant, Bond lifecycle</td><td>Core <code>relationships</code>, pulse-connections</td><td>3</td></tr>
+        <tr><td><code>pulse-interactions</code></td><td>Pulse/Knock/MoodResponse state machine</td><td>relationships, notifications, devices, bond</td><td>4-7</td></tr>
+        <tr><td><code>mood</code></td><td>Today's Mood, audience, expiry</td><td>pulse-connections, groups</td><td>8</td></tr>
+        <tr><td><code>live-touch</code></td><td>Synchronous touch session lifecycle</td><td>bond, pulse-connections, pulse-interactions</td><td>10</td></tr>
+        <tr><td><code>signals</code></td><td>Custom touch-pattern storage</td><td>pulse-connections, bond</td><td>11</td></tr>
+        <tr><td><code>moments</code></td><td>Saved-highlights timeline (references only, no chat)</td><td>pulse-interactions</td><td>12</td></tr>
+        <tr><td><code>pulse-preferences</code></td><td>Notification detail level, mute</td><td>Core <code>notifications</code></td><td>13</td></tr>
+        <tr><td><code>pulse-entitlements</code></td><td><code>pulse.plus</code> feature gating</td><td>Core <code>billing</code></td><td>16</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Core capabilities reused (already real, verified this audit)</h3>
+    <table>
+      <thead><tr><th>Pulse need</th><th>Core module</th></tr></thead>
+      <tbody>
+        <tr><td>Auth / identity</td><td><code>identity</code>, <code>users</code> (Keycloak-backed)</td></tr>
+        <tr><td>Multi-device / push tokens</td><td><code>devices</code></td></tr>
+        <tr><td>Connections, Bond, Friend, Close Friend</td><td><code>relationships</code> — generic Type string + Status(pending/active/blocked/ended)</td></tr>
+        <tr><td>Circles</td><td><code>groups</code></td></tr>
+        <tr><td>Authorization</td><td><code>authz</code> (RBAC + OpenFGA)</td></tr>
+        <tr><td>Blocking, Muting, Reporting, Abuse escalation</td><td><code>trustsafety</code></td></tr>
+        <tr><td>Rate limiting</td><td><code>platformkit/ratelimit</code> (Valkey-backed)</td></tr>
+        <tr><td>Realtime delivery (1:1 and channel fan-out)</td><td><code>realtime-gateway</code> — <code>PublishToUser</code> / <code>PublishToChannel</code></td></tr>
+        <tr><td>Push notifications</td><td><code>notifications</code> — channel-neutral, never calls FCM/APNs directly</td></tr>
+        <tr><td>Quiet Hours</td><td><code>notifications.QuietHours</code> — already real, already distinguishes interruptive vs. passive channels</td></tr>
+        <tr><td>Scheduled Pulse (future)</td><td><code>workflows</code> (Temporal-backed, supports cron schedule)</td></tr>
+        <tr><td>Feature flags</td><td><code>features</code></td></tr>
+        <tr><td>Remote configuration</td><td><code>remoteconfig</code></td></tr>
+        <tr><td>Entitlements / billing</td><td><code>billing</code></td></tr>
+        <tr><td>Analytics</td><td><code>analytics</code></td></tr>
+        <tr><td>Privacy export/delete</td><td><code>privacy</code></td></tr>
+        <tr><td>Audit trail</td><td><code>audit</code></td></tr>
+        <tr><td>Observability (metrics/logs/traces)</td><td><code>platformkit/{metrics,logging,otelx,correlation}</code></td></tr>
+        <tr><td>Application registry (Pulse's own AppID)</td><td><code>applications</code></td></tr>
+        <tr><td>Client SDK</td><td><code>packages/flutter/core_sdk</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h3>Genuine Core gaps found (2)</h3>
+    <p><b>1. Deep linking (§52).</b> No deep-link infrastructure exists anywhere in Core. Recommendation: build in Pulse (mobile-app-level Universal Links/App Links config + a thin <code>POST /v1/pulse/invites</code> endpoint), not Core — this isn't a generic-enough capability to justify a Core change yet.</p>
+    <p><b>2. Multi-device delivery policy (§73-74).</b> Core's <code>notifications</code> sends to all of a user's active devices; nothing expresses "primary device only" / "wearable preferred" as a caller policy. Recommendation: defer — Phases 4-5 work correctly against "all active devices," revisit once wearables (Phase 17) are real.</p>
+  </div>
+</section>
+
+<!-- CONTRACTS -->
+<section class="panel" id="contracts">
+  <h2>API &amp; Event Contracts</h2>
+  <p class="hint">Pulse owns its own OpenAPI/AsyncAPI documents (<code>apps/pulse/contracts/</code>), separate from Core's <code>contracts/</code> — Pulse's API is a product API, not a Core API. Published through Core's existing outbox mechanism, never a second event bus.</p>
+
+  <div class="card">
+    <h3>REST — Pulse Product API</h3>
+    <pre>POST   /v1/pulse/connections/requests
+POST   /v1/pulse/connections/requests/{id}/accept
+POST   /v1/pulse/connections/requests/{id}/decline
+DELETE /v1/pulse/connections/{id}
+
+POST   /v1/pulse/bond/requests
+POST   /v1/pulse/bond/requests/{id}/accept
+POST   /v1/pulse/bond/requests/{id}/decline
+DELETE /v1/pulse/bond
+GET    /v1/pulse/bond
+
+PUT    /v1/pulse/mood
+DELETE /v1/pulse/mood
+GET    /v1/pulse/mood/{userId}
+GET    /v1/pulse/mood/feed
+
+POST   /v1/pulse/interactions
+POST   /v1/pulse/interactions/{id}/start
+POST   /v1/pulse/interactions/{id}/stop
+POST   /v1/pulse/interactions/{id}/complete
+GET    /v1/pulse/interactions/{id}
+GET    /v1/pulse/interactions
+
+POST   /v1/pulse/knocks
+POST   /v1/pulse/signals
+GET    /v1/pulse/signals
+DELETE /v1/pulse/signals/{id}
+
+POST   /v1/pulse/live-touch/sessions
+POST   /v1/pulse/live-touch/sessions/{id}/accept
+POST   /v1/pulse/live-touch/sessions/{id}/end
+
+GET    /v1/pulse/moments
+POST   /v1/pulse/moments/{interactionId}/save
+
+GET    /v1/pulse/preferences
+PUT    /v1/pulse/preferences</pre>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h3>Realtime (ephemeral, WebSocket)</h3>
+      <ul class="plain">
+        <li><code>pulse.started</code> / <code>pulse.stopped</code> — <code>PublishToUser</code></li>
+        <li><code>knock.sent</code> — <code>PublishToUser</code></li>
+        <li><code>live_touch.touch_started</code> / <code>touch_stopped</code> — per-session channel</li>
+        <li><code>signal.segment</code> — compact pattern array, never per-millisecond ticks</li>
+        <li><code>presence.changed</code> — reuses Core's existing TTL presence, Pulse states carried as a value</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Durable events (outbox → AsyncAPI)</h3>
+      <ul class="plain">
+        <li><code>pulse.completed</code>, <code>pulse.delivered</code></li>
+        <li><code>knock.sent</code></li>
+        <li><code>bond.requested</code>, <code>bond.accepted</code>, <code>bond.ended</code></li>
+        <li><code>mood.updated</code>, <code>mood.expired</code></li>
+        <li><code>moment.saved</code></li>
+        <li><code>signal.created</code></li>
+        <li><code>interaction.reported</code></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Authorization model — every interaction checks, in order</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="dot">1</div><div class="txt">Caller identity from the Core JWT (<code>users.FromContext</code>)</div></div>
+      <div class="flow-step"><div class="dot">2</div><div class="txt">Connection exists and is active</div></div>
+      <div class="flow-step"><div class="dot">3</div><div class="txt">Not blocked (relationship-level + platform-wide ban/suspension)</div></div>
+      <div class="flow-step"><div class="dot">4</div><div class="txt">Bond-gated features additionally require an ACTIVE bond</div></div>
+      <div class="flow-step"><div class="dot">5</div><div class="txt">Mood audience resolved against Friend/Close-Friend/Circle classification</div></div>
+      <div class="flow-step"><div class="dot">6</div><div class="txt">Rate limit check, remote-configurable, keyed per sender+type and per receiver independently</div></div>
+      <div class="flow-step"><div class="dot">7</div><div class="txt">Mute checked at delivery time — distinct from Block, suppresses delivery not creation</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<section class="panel" id="roadmap">
+  <h2>Roadmap &amp; Todo Checklist</h2>
+  <p class="hint">18 phases: Phase 0 (this audit) plus the product spec's own 17 implementation phases (§101), adopted as-is — they already follow the vertical-slice, independently-validated discipline this whole platform was built with. Each phase closes with: Inspect → Design → Implement → Test → Validate live → Document → Commit.</p>
+
+  <div class="card phase-card done">
+    <h3><span class="phase-num">0</span>Architecture Audit <span class="badge done">Done</span></h3>
+    <p>Core-to-Pulse capability map, module boundaries, data ownership, API/realtime/event contracts, authorization model, mobile architecture, risks, and this phased plan. No feature code written — required to stop here before implementation per the spec's own §106.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Inspect Core Platform + read AI_CONTEXT.md</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Core-to-Pulse capability map (apps/pulse/docs/ARCHITECTURE_AUDIT.md)</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Module boundaries + data ownership defined</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>REST / realtime / durable event contracts sketched</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Repository scaffolded (apps/pulse/{mobile,api,modules,contracts,docs})</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>This dashboard published</li>
+    </ul>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">1</span>Product Foundation <span class="badge pending">Pending</span></h3>
+    <p>Register Pulse as a Core Application, scaffold apps/pulse/api (Go, platformkit-based), scaffold apps/pulse/mobile (Flutter, five-tab shell), stand up pulse-profile end-to-end as the first proof the whole chain works.</p>
+    <ul class="todo-list">
+      <li><div class="box"></div>Pulse application registration (real POST /v1/apps call)</li>
+      <li><div class="box"></div>apps/pulse/api Go service scaffold (own Postgres/migrations)</li>
+      <li><div class="box"></div>pulse-profile module (domain/service/http/postgres/memory + tests)</li>
+      <li><div class="box"></div>apps/pulse/mobile Flutter scaffold + navigation shell (Home/People/Mood/Moments/Profile)</li>
+      <li><div class="box"></div>Core SDK integration (core_sdk path dependency)</li>
+      <li><div class="box"></div>Feature-flag namespace registered (pulse, pulse_back, knock, mood, live_touch, custom_signals, moments, scheduled_pulse, wearables)</li>
+      <li><div class="box"></div>Analytics namespace registered</li>
+    </ul>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">2</span>Connection Experience <span class="badge pending">Pending</span></h3>
+    <p>pulse-connections over Core relationships: find/invite, request, accept, decline, remove, Friend vs Close Friend.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">3</span>Partner Bond <span class="badge pending">Pending</span></h3>
+    <p>Bond request/accept, one-active-Bond policy (Postgres partial unique index, not just app-level check), ending, Bond-specific permissions. Tests must cover concurrent Bond requests.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">4</span>Basic Pulse <span class="badge pending">Pending</span></h3>
+    <p>The critical phase: hold-to-Pulse, PulseStart/PulseStop, server-authoritative duration, realtime delivery, native haptic, durable completion, analytics, observability. Do not proceed until reliable between two devices/simulators.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">5</span>Push Fallback <span class="badge pending">Pending</span></h3>
+    <p>Receiver offline → Core Notification → push. iOS and Android validated and documented separately.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">6</span>Pulse Back <span class="badge pending">Pending</span></h3>
+    <p>Rapid reciprocal interaction, faster than opening messaging. Measures Pulse-received → Pulse-Back latency.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">7</span>Knock <span class="badge pending">Pending</span></h3>
+    <p>Short predefined haptic pattern; architecture made extensible toward custom signals.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">8</span>Today's Mood <span class="badge pending">Pending</span></h3>
+    <p>Mood selection, audience, expiry, display, non-verbal response via Pulse/Knock. Wordless-first.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">9</span>Close Friends &amp; Circles <span class="badge pending">Pending</span></h3>
+    <p>Core groups/relationship integration for Mood audience and interaction permissions.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">10</span>Live Touch <span class="badge pending">Pending</span></h3>
+    <p>Flagship feature: session invite/accept, realtime presence, bidirectional touch start/stop, disconnect handling, latency telemetry. Network/haptic quality is high priority.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">11</span>Custom Touch Language <span class="badge pending">Pending</span></h3>
+    <p>Signal pattern creation, bounded (no malicious infinite/very-long vibration patterns).</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">12</span>Moments <span class="badge pending">Pending</span></h3>
+    <p>Recent interactions, save moment, retention, privacy. No chat.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">13</span>Quiet Hours / Experience Controls <span class="badge pending">Pending</span></h3>
+    <p>Quiet hours, mute, notification privacy, haptic intensity, device preferences.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">14</span>Trust &amp; Safety <span class="badge pending">Pending</span></h3>
+    <p>Block, report, abuse rate limiting, spam prevention, Bond ending, relationship removal — all validated against real Core trustsafety infrastructure.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">15</span>Polish <span class="badge pending">Pending</span></h3>
+    <p>Animations, accessibility, localization, onboarding, deep links, invite flow, offline UX, error UX, performance, battery optimization.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">16</span>Monetisation Foundation <span class="badge pending">Pending</span></h3>
+    <p>Core Entitlements integration. Never blocks core Pulse communication. Premium capabilities behind flags.</p>
+  </div>
+
+  <div class="card phase-card pending">
+    <h3><span class="phase-num">17</span>Wearable Preparation <span class="badge pending">Pending</span></h3>
+    <p>Apple Watch / Wear OS architecture, only after mobile is stable. Does not compromise mobile architecture for premature wearable support.</p>
+  </div>
+</section>
+
+<!-- DOD -->
+<section class="panel" id="dod">
+  <h2>Definitions of Done</h2>
+  <p class="hint">The three most detailed completion bars from the product spec (§102-104), tracked here so "done" means the same thing to everyone building this.</p>
+
+  <div class="card">
+    <h3>Basic Pulse is done when...</h3>
+    <div class="dod-grid">
+      <div class="dod-item"><div class="box"></div>Two users can connect</div>
+      <div class="dod-item"><div class="box"></div>Sender can select a receiver</div>
+      <div class="dod-item"><div class="box"></div>Sender can press and hold; local visual responds</div>
+      <div class="dod-item"><div class="box"></div>PulseStart reaches the server; authorization is checked</div>
+      <div class="dod-item"><div class="box"></div>Receiver gets Live Pulse when foreground/online; haptic starts</div>
+      <div class="dod-item"><div class="box"></div>Sender release produces PulseStop; receiver haptic stops</div>
+      <div class="dod-item"><div class="box"></div>Duration is server-calculated/validated, never client-trusted</div>
+      <div class="dod-item"><div class="box"></div>Interaction persisted appropriately; duplicates prevented (idempotency)</div>
+      <div class="dod-item"><div class="box"></div>Receiver offline triggers push fallback</div>
+      <div class="dod-item"><div class="box"></div>Blocking prevents Pulse; rate limits work</div>
+      <div class="dod-item"><div class="box"></div>Analytics event, trace, structured logs all exist</div>
+      <div class="dod-item"><div class="box"></div>Tests pass; iOS and Android behaviour both documented</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Today's Mood is done when...</h3>
+    <div class="dod-grid">
+      <div class="dod-item"><div class="box"></div>User selects visual Mood and audience</div>
+      <div class="dod-item"><div class="box"></div>Mood persists and expires correctly (timezone-correct)</div>
+      <div class="dod-item"><div class="box"></div>Unauthorized users cannot view; authorized connections can</div>
+      <div class="dod-item"><div class="box"></div>Mood can be updated and cleared</div>
+      <div class="dod-item"><div class="box"></div>Mood can receive a non-verbal response</div>
+      <div class="dod-item"><div class="box"></div>Analytics/audit exist where required; tests pass</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Live Touch is done when...</h3>
+    <div class="dod-grid">
+      <div class="dod-item"><div class="box"></div>Authorized users can create and accept a session</div>
+      <div class="dod-item"><div class="box"></div>Both realtime connections established</div>
+      <div class="dod-item"><div class="box"></div>Touch start/stop route correctly; remote haptic responds</div>
+      <div class="dod-item"><div class="box"></div>Disconnect and timeout both handled</div>
+      <div class="dod-item"><div class="box"></div>Block/mute enforced; rate limiting enforced</div>
+      <div class="dod-item"><div class="box"></div>Latency measured; session completes cleanly</div>
+      <div class="dod-item"><div class="box"></div>Mobile battery impact assessed</div>
+      <div class="dod-item"><div class="box"></div>iOS and Android limitations documented; tests + runtime validation complete</div>
+    </div>
+  </div>
+</section>
+
+<!-- RISKS -->
+<section class="panel" id="risks">
+  <h2>Risks</h2>
+  <p class="hint">Named honestly now, before implementation, so they're designed around rather than discovered late.</p>
+
+  <div class="card"><span class="risk-num">1</span><b>iOS background haptic promises.</b> The single highest product risk named in the spec itself. Any implementation implying continuous remote vibration while backgrounded/locked on iOS misrepresents what the OS allows. Live Pulse and Offline Pulse must stay architecturally distinct code paths from Phase 4 onward — never a "best effort" blend. This session's environment has no Android SDK and an incomplete Xcode install, so native haptic behaviour cannot be end-to-end validated here until a real device/simulator is available — flag this honestly in every phase's validation.</div>
+
+  <div class="card"><span class="risk-num">2</span><b>One-active-Bond concurrency.</b> Two simultaneous Bond requests targeting the same user must not both succeed. Needs a real concurrency test (two goroutines racing an accept) against Postgres with a partial unique index (<code>WHERE status = 'ACTIVE'</code>) as the actual enforcement mechanism — the same lesson Core's own billing/authz modules already learned about not trusting application-level-only invariants.</div>
+
+  <div class="card"><span class="risk-num">3</span><b>Trusting client-submitted duration.</b> Server timestamps are truth; client <code>startedAt</code>/<code>endedAt</code> are UX-only. A test asserting a forged large <code>durationMs</code> is ignored in favor of server-observed timing should exist before Phase 4 is called done.</div>
+
+  <div class="card"><span class="risk-num">4</span><b>Custom signal pattern abuse.</b> An unbounded <code>segments[]</code> array could construct a very long or rapid vibration pattern. Needs explicit server-side bounds (max segment count, max total duration) at creation time, not just client-side UI limits.</div>
+
+  <div class="card"><span class="risk-num">5</span><b>Deep-link / invite-link growth loop intersects Trust &amp; Safety.</b> An open invite-link flow is a natural spam vector — must reuse trustsafety's rate limiting on invite creation, not just on Pulse/Knock sending.</div>
+
+  <div class="card"><span class="risk-num">6</span><b>Toolchain gap for real device testing.</b> This environment has Flutter but no Android SDK and an incomplete Xcode install. Live validation of native haptics — the product's actual core value — cannot happen end-to-end here without that toolchain. Name this gap honestly in every phase's validation rather than simulating haptic behaviour and calling it validated.</div>
+</section>
+
+</main>
+
+</body>
+</html>

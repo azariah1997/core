@@ -1,0 +1,5 @@
+name: pulse-entitlements
+owner: pulse
+lifecycle: planned
+dependencies:
+  - core:billing
