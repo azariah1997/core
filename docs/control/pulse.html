@@ -199,7 +199,7 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">7 / 18</div><div class="label">Phases complete (Audit → Pulse Back)</div></div>
+    <div class="stat-pill"><div class="num">8 / 18</div><div class="label">Phases complete (Audit → Knock)</div></div>
     <div class="stat-pill"><div class="num">4 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
@@ -686,9 +686,17 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">7</span>Knock <span class="badge pending">Pending</span></h3>
-    <p>Short predefined haptic pattern; architecture made extensible toward custom signals.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">7</span>Knock <span class="badge done">Done</span></h3>
+    <p><code>POST /v1/pulse/knocks</code> - a short predefined haptic pattern ("quicker, lighter... a nudge, not a hold", spec §18), not a held gesture, so one API call: Create+Start+Stop back-to-back, same shape as Pulse Back. Reuses Pulse's exact <code>interactions</code> table and state machine via a second <code>Type</code> value rather than a parallel implementation - a new nullable <code>pattern</code> column (one of four predefined names: double_tap, triple_tap, long_short, short_long_short) is the only schema change. This required generalizing <code>Notifier</code> from a Pulse-specific <code>NotifyPulseReceived(receiverUserID, durationMs)</code> method to one shared <code>Notify(receiverUserID, category, title, body, data)</code> method, and deriving <code>Start</code>/<code>Stop</code>'s realtime event names and analytics event names from <code>Interaction.Type</code> instead of hardcoding them - the extensible architecture this phase was explicitly asked to leave behind for Phase 11's Custom Signals. Live-validated end to end with real Keycloak users: a real WebSocket connection receiving both <code>knock.started</code> and <code>knock.stopped</code> with zero push notifications sent while live; then, with the receiver genuinely offline, one real <code>knock_received</code> notification landing in Core's database attributed to the real sender and carrying the requested pattern, plus durable <code>knock_started</code>/<code>knock_completed</code> analytics events for both runs. Mobile gained a real "Knock" button on the Home tab and incoming-Knock haptic + banner handling.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Second <code>Type</code> value on the shared <code>interactions</code> state machine, not a parallel table</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>One-call Create+Start+Stop, reusing the exact authorization/rate-limit/presence logic Pulse and Pulse Back already established</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Four predefined patterns, server-validated, defaulting to double_tap</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div><code>Notifier</code> generalized to one method shared by every interaction type, not one per type</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Realtime event names and analytics event names derived from <code>Type</code>, not hardcoded - the extensibility Phase 11 needs</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mobile "Knock" button plus incoming-Knock haptic and banner, wired to the real API</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">

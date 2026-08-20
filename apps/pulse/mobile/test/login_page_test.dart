@@ -79,6 +79,13 @@ http.Client _fakeBackend({bool failLogin = false}) {
         headers: {'content-type': 'application/json'},
       );
     }
+    if (req.url.path == '/v1/pulse/knocks') {
+      return http.Response(
+        jsonEncode({'id': 'knock-1', 'type': 'knock', 'otherUserId': 'user-2friend', 'role': 'sender', 'status': 'completed', 'deliveryMode': 'live', 'pattern': 'double_tap', 'createdAt': '2026-01-01T00:00:00.000Z'}),
+        201,
+        headers: {'content-type': 'application/json'},
+      );
+    }
     if (req.url.path == '/v1/users/me/devices') {
       return http.Response(
         jsonEncode({
@@ -146,6 +153,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Pulse sent — felt for 842ms'), findsOneWidget);
+  });
+
+  testWidgets('tapping Knock sends a real Knock round trip', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('knockButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Knock sent'), findsOneWidget);
   });
 
   testWidgets('the Profile tab round-trips through the real pulse-api chain', (tester) async {

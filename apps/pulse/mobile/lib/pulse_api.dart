@@ -68,6 +68,17 @@ class PulseApi {
         '/v1/pulse/interactions/$interactionId/pulse-back',
         decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
       );
+
+  /// Knock (product spec §18) - a short predefined pattern, not a held
+  /// gesture, so one call: the server creates, starts, and stops it
+  /// itself and returns it already completed, same shape as pulseBack.
+  /// pattern defaults server-side to double_tap when omitted.
+  Future<PulseInteraction> knock(String receiverId, {String? pattern}) => _client.request(
+        'POST',
+        '/v1/pulse/knocks',
+        body: {'receiverId': receiverId, 'pattern': ?pattern},
+        decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
+      );
 }
 
 class PulseConnection {

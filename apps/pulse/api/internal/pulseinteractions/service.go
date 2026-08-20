@@ -58,6 +58,15 @@ func checkConnected(ctx context.Context, core CoreRelationships, otherUserID str
 }
 
 func (s *Service) Create(ctx context.Context, core CoreRelationships, callerID string, in CreateInput) (Interaction, error) {
+	return s.createInteraction(ctx, core, TypePulse, callerID, in)
+}
+
+// createInteraction is Create's actual logic, parametrized by Type so
+// Knock (and Phase 11's Custom Signals) share the exact same
+// authorization/rate-limit/idempotency path rather than duplicating it -
+// every Type currently shares one rate-limit budget, since they're all
+// the same "sender reaches out" action from the receiver's perspective.
+func (s *Service) createInteraction(ctx context.Context, core CoreRelationships, typ Type, callerID string, in CreateInput) (Interaction, error) {
 	if err := in.Validate(); err != nil {
 		return Interaction{}, err
 	}
@@ -73,11 +82,14 @@ func (s *Service) Create(ctx context.Context, core CoreRelationships, callerID s
 	}
 	now := time.Now().UTC()
 	i := Interaction{
-		ID: uuid.NewString(), Type: TypePulse, SenderID: callerID, ReceiverID: in.ReceiverID,
+		ID: uuid.NewString(), Type: typ, SenderID: callerID, ReceiverID: in.ReceiverID,
 		Status: StatusCreated, CreatedAt: now, UpdatedAt: now,
 	}
 	if in.InResponseToID != "" {
 		i.InResponseToID = &in.InResponseToID
+	}
+	if in.Pattern != "" {
+		i.Pattern = &in.Pattern
 	}
 	return s.repo.Create(ctx, i, in.ClientRequestID)
 }
@@ -114,11 +126,11 @@ func (s *Service) Start(ctx context.Context, presence Presence, callerID, id str
 		return Interaction{}, err
 	}
 	if deliveryMode == DeliveryLive {
-		s.publishPush(ctx, "pulse.started", started.ReceiverID, map[string]any{
+		s.publishPush(ctx, string(started.Type)+".started", started.ReceiverID, map[string]any{
 			"interactionId": started.ID, "senderId": started.SenderID, "startedAt": now.Format(time.RFC3339Nano),
 		})
 	}
-	_ = s.analytics.Track(ctx, "pulse_started", started.SenderID, map[string]any{
+	_ = s.analytics.Track(ctx, string(started.Type)+"_started", started.SenderID, map[string]any{
 		"interactionId": started.ID, "receiverId": started.ReceiverID, "deliveryMode": string(deliveryMode),
 	})
 	return started, nil
@@ -151,7 +163,7 @@ func (s *Service) Stop(ctx context.Context, notifier Notifier, callerID, id stri
 	}
 	switch completed.DeliveryMode {
 	case DeliveryLive:
-		s.publishPush(ctx, "pulse.stopped", completed.ReceiverID, map[string]any{
+		s.publishPush(ctx, string(completed.Type)+".stopped", completed.ReceiverID, map[string]any{
 			"interactionId": completed.ID, "endedAt": now.Format(time.RFC3339Nano),
 		})
 	case DeliveryPush:
@@ -159,10 +171,28 @@ func (s *Service) Stop(ctx context.Context, notifier Notifier, callerID, id stri
 		// (e.g. the receiver has no registered device) never fails the
 		// underlying Stop call; the durable interaction record already
 		// captured what happened.
-		_ = notifier.NotifyPulseReceived(ctx, completed.ReceiverID, durationMs)
+		category, title, body, data := notificationContent(completed, durationMs)
+		_ = notifier.Notify(ctx, completed.ReceiverID, category, title, body, data)
 	}
 	s.trackCompleted(ctx, completed, durationMs)
 	return completed, nil
+}
+
+// notificationContent picks the push category/title/body/data per Type -
+// the one place Pulse and Knock's Stop-time behavior actually differs.
+// Content is deliberately generic (spec §72's Private-tier default),
+// never naming the sender.
+func notificationContent(i Interaction, durationMs int) (category, title, body string, data map[string]any) {
+	switch i.Type {
+	case TypeKnock:
+		pattern := string(KnockPatternDoubleTap)
+		if i.Pattern != nil {
+			pattern = *i.Pattern
+		}
+		return "knock_received", "Knock", "You received a Knock", map[string]any{"pattern": pattern}
+	default:
+		return "pulse_received", "Pulse", "You received a Pulse", map[string]any{"durationMs": durationMs}
+	}
 }
 
 // PulseBack is the fundamental social loop (spec §17): "A → Pulse, B →
@@ -213,6 +243,35 @@ func (s *Service) PulseBack(ctx context.Context, core CoreRelationships, presenc
 	return completed, nil
 }
 
+// Knock is spec §18: a short predefined haptic pattern, distinct from a
+// held Pulse - "quicker, lighter... a nudge, not a hold." Internally it's
+// Create+Start+Stop back-to-back against the shared interaction state
+// machine (the same reuse PulseBack established), typed TypeKnock with a
+// Pattern carried through from creation - the caller feels a fixed
+// pattern, never a variable duration the way a Pulse does, so Stop
+// follows Start immediately rather than waiting on any client signal.
+func (s *Service) Knock(ctx context.Context, core CoreRelationships, presence Presence, notifier Notifier, callerID string, in KnockInput) (Interaction, error) {
+	pattern := in.Pattern
+	if pattern == "" {
+		pattern = KnockPatternDoubleTap
+	}
+	if !pattern.valid() {
+		return Interaction{}, &ValidationError{Message: "invalid knock pattern"}
+	}
+
+	created, err := s.createInteraction(ctx, core, TypeKnock, callerID, CreateInput{
+		ReceiverID: in.ReceiverID,
+		Pattern:    string(pattern),
+	})
+	if err != nil {
+		return Interaction{}, err
+	}
+	if _, err := s.Start(ctx, presence, callerID, created.ID); err != nil {
+		return Interaction{}, err
+	}
+	return s.Stop(ctx, notifier, callerID, created.ID)
+}
+
 func (s *Service) Get(ctx context.Context, callerID, id string) (Interaction, error) {
 	i, err := s.repo.Get(ctx, id)
 	if err != nil {
@@ -248,7 +307,7 @@ func (s *Service) publishPush(ctx context.Context, eventType, receiverID string,
 }
 
 func (s *Service) trackCompleted(ctx context.Context, i Interaction, durationMs int) {
-	_ = s.analytics.Track(ctx, "pulse_completed", i.SenderID, map[string]any{
+	_ = s.analytics.Track(ctx, string(i.Type)+"_completed", i.SenderID, map[string]any{
 		"interactionId": i.ID, "receiverId": i.ReceiverID, "durationMs": durationMs, "deliveryMode": string(i.DeliveryMode),
 	})
 }

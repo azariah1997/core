@@ -138,11 +138,11 @@ func NewNotifierAdapter(client *coresdk.Client, appID string) NotifierAdapter {
 	return NotifierAdapter{client: client, appID: appID}
 }
 
-func (a NotifierAdapter) NotifyPulseReceived(ctx context.Context, receiverUserID string, durationMs int) error {
-	body := map[string]any{
-		"appId": a.appID, "userId": receiverUserID, "category": "pulse_received",
-		"channels": []string{"push"}, "title": "Pulse", "body": "You received a Pulse",
-		"data": map[string]any{"durationMs": durationMs},
+func (a NotifierAdapter) Notify(ctx context.Context, receiverUserID, category, title, body string, data map[string]any) error {
+	reqBody := map[string]any{
+		"appId": a.appID, "userId": receiverUserID, "category": category,
+		"channels": []string{"push"}, "title": title, "body": body,
+		"data": data,
 	}
-	return a.client.Do(ctx, "POST", "/v1/notifications", body, nil)
+	return a.client.Do(ctx, "POST", "/v1/notifications", reqBody, nil)
 }

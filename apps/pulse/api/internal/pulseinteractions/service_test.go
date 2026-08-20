@@ -74,7 +74,7 @@ type fakeNotifier struct {
 	fail error
 }
 
-func (f *fakeNotifier) NotifyPulseReceived(ctx context.Context, receiverUserID string, durationMs int) error {
+func (f *fakeNotifier) Notify(ctx context.Context, receiverUserID, category, title, body string, data map[string]any) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, receiverUserID)
@@ -393,6 +393,81 @@ func TestPulseBackCreatesAReciprocalInteractionLinkedToTheOriginal(t *testing.T)
 	}
 	if !found {
 		t.Fatalf("expected a pulse_back analytics event attributed to the responder, got %v", analytics.tracks)
+	}
+}
+
+func TestKnockRequiresAnExistingConnection(t *testing.T) {
+	svc := newService(&fakeRealtime{}, &fakeAnalytics{}, true)
+	core := newFakeCoreRelationships() // no connection
+	_, err := svc.Knock(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, "caller-1", pulseinteractions.KnockInput{ReceiverID: "user-2"})
+	if !errors.Is(err, pulseinteractions.ErrNotConnected) {
+		t.Fatalf("expected ErrNotConnected, got %v", err)
+	}
+}
+
+func TestKnockRejectsAnInvalidPattern(t *testing.T) {
+	svc := newService(&fakeRealtime{}, &fakeAnalytics{}, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+	_, err := svc.Knock(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, "caller-1", pulseinteractions.KnockInput{ReceiverID: "user-2", Pattern: "not_a_real_pattern"})
+	var validationErr *pulseinteractions.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected a ValidationError for an invalid pattern, got %v", err)
+	}
+}
+
+func TestKnockDefaultsToDoubleTapAndCompletesInOneCall(t *testing.T) {
+	realtime := &fakeRealtime{}
+	analytics := &fakeAnalytics{}
+	svc := newService(realtime, analytics, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+
+	knock, err := svc.Knock(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, "caller-1", pulseinteractions.KnockInput{ReceiverID: "user-2"})
+	if err != nil {
+		t.Fatalf("knock: %v", err)
+	}
+	if knock.Type != pulseinteractions.TypeKnock {
+		t.Fatalf("expected TypeKnock, got %v", knock.Type)
+	}
+	if knock.Pattern == nil || *knock.Pattern != string(pulseinteractions.KnockPatternDoubleTap) {
+		t.Fatalf("expected the default double_tap pattern, got %v", knock.Pattern)
+	}
+	if knock.Status != pulseinteractions.StatusCompleted {
+		t.Fatalf("expected Knock to complete the whole create+start+stop cycle in one call, got status %v", knock.Status)
+	}
+
+	analytics.mu.Lock()
+	defer analytics.mu.Unlock()
+	found := false
+	for _, track := range analytics.tracks {
+		if track == "knock_completed:caller-1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a knock_completed analytics event, got %v", analytics.tracks)
+	}
+}
+
+func TestKnockDeliversAPushNotificationWhenReceiverIsOffline(t *testing.T) {
+	svc := newService(&fakeRealtime{}, &fakeAnalytics{}, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+
+	notifier := &fakeNotifier{}
+	knock, err := svc.Knock(context.Background(), core, fakePresence{online: false}, notifier, "caller-1", pulseinteractions.KnockInput{ReceiverID: "user-2", Pattern: pulseinteractions.KnockPatternTripleTap})
+	if err != nil {
+		t.Fatalf("knock: %v", err)
+	}
+	if knock.DeliveryMode != pulseinteractions.DeliveryPush {
+		t.Fatalf("expected DeliveryPush for an offline receiver, got %v", knock.DeliveryMode)
+	}
+
+	notifier.mu.Lock()
+	defer notifier.mu.Unlock()
+	if len(notifier.sent) != 1 || notifier.sent[0] != "user-2" {
+		t.Fatalf("expected exactly one push notification to user-2, got %v", notifier.sent)
 	}
 }
 

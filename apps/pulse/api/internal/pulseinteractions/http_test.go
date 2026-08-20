@@ -260,6 +260,48 @@ func TestPulseBackRejectsAnIncompleteOriginalThroughTheRealRouter(t *testing.T) 
 	}
 }
 
+func TestKnockHandlerRoundTripsThroughTheRealRouter(t *testing.T) {
+	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
+	server, fakeCore := newFakeCoreServer(t, "pulse_friend", "active", false) // receiver offline
+	mux := http.NewServeMux()
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/pulse/knocks", strings.NewReader(`{"receiverId":"user-2","pattern":"triple_tap"}`)))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var knock struct {
+		Type       string `json:"type"`
+		Status     string `json:"status"`
+		Pattern    string `json:"pattern"`
+		DurationMs int    `json:"durationMs"`
+	}
+	json.Unmarshal(rr.Body.Bytes(), &knock)
+	if knock.Type != "knock" || knock.Status != "completed" || knock.Pattern != "triple_tap" {
+		t.Fatalf("expected a completed knock with the requested pattern, got %+v", knock)
+	}
+
+	fakeCore.mu.Lock()
+	defer fakeCore.mu.Unlock()
+	if len(fakeCore.notificationsSent) != 1 || fakeCore.notificationsSent[0] != "user-2" {
+		t.Fatalf("expected exactly one push notification to user-2, got %v", fakeCore.notificationsSent)
+	}
+}
+
+func TestKnockHandlerRejectsAnInvalidPattern(t *testing.T) {
+	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
+	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)
+	mux := http.NewServeMux()
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/pulse/knocks", strings.NewReader(`{"receiverId":"user-2","pattern":"not_a_real_pattern"}`)))
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for an invalid pattern, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestStopBeforeStartReturnsConflict(t *testing.T) {
 	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
 	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)

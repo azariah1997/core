@@ -199,6 +199,22 @@ class _HomeShellState extends State<HomeShell> {
           if (mounted) setState(() => _incomingBanner = null);
         });
         break;
+      // Knock (Phase 7, spec §18) is "quicker, lighter... a nudge, not a
+      // hold" - felt as its own haptic pattern, with no Pulse-Back-style
+      // response action, so the banner never sets _incomingInteractionId
+      // and clears itself faster than a held Pulse's does.
+      case 'knock.started':
+        _haptics.playKnock();
+        setState(() {
+          _incomingBanner = 'Someone knocked 👋';
+          _incomingInteractionId = null;
+        });
+        break;
+      case 'knock.stopped':
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _incomingBanner = null);
+        });
+        break;
     }
   }
 
@@ -393,6 +409,21 @@ class _HomeTabState extends State<_HomeTab> {
     }
   }
 
+  // Knock (spec §18): a short predefined pattern, not a held gesture -
+  // one call, felt (or fired-and-forgotten) immediately, unlike Pulse's
+  // press/release pair above.
+  Future<void> _sendKnock() async {
+    final target = _target;
+    if (target == null || _holding) return;
+    widget.haptics.playKnock();
+    try {
+      await widget.pulseApi.knock(target.otherUserId);
+      setState(() => _lastResult = 'Knock sent');
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
   @override
   void dispose() {
     _ticker?.cancel();
@@ -450,6 +481,12 @@ class _HomeTabState extends State<_HomeTab> {
           Text(_holding ? 'Holding… ${(_elapsed.inMilliseconds / 1000).toStringAsFixed(1)}s' : 'Hold to Pulse'),
           const SizedBox(height: 4),
           Text('to @${target.otherUserId.substring(0, 8)} (${target.classification})', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            key: const Key('knockButton'),
+            onPressed: _holding ? null : _sendKnock,
+            child: const Text('Knock'),
+          ),
           if (_lastResult != null) ...[
             const SizedBox(height: 12),
             Text(_lastResult!, style: TextStyle(color: Theme.of(context).colorScheme.primary)),

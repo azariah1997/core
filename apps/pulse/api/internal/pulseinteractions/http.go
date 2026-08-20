@@ -37,6 +37,7 @@ func RegisterRoutes(mux *http.ServeMux, svc *Service, newCore CoreFactory, newPr
 	mux.Handle("POST /v1/pulse/interactions/{id}/start", requireUser(startHandler(svc, newPresence)))
 	mux.Handle("POST /v1/pulse/interactions/{id}/stop", requireUser(stopHandler(svc, newNotifier)))
 	mux.Handle("POST /v1/pulse/interactions/{id}/pulse-back", requireUser(pulseBackHandler(svc, newCore, newPresence, newNotifier)))
+	mux.Handle("POST /v1/pulse/knocks", requireUser(knockHandler(svc, newCore, newPresence, newNotifier)))
 	mux.Handle("GET /v1/pulse/interactions/{id}", requireUser(getHandler(svc)))
 	mux.Handle("GET /v1/pulse/interactions", requireUser(listMineHandler(svc)))
 }
@@ -49,6 +50,7 @@ type interactionResponse struct {
 	Status         string  `json:"status"`
 	DeliveryMode   string  `json:"deliveryMode"`
 	InResponseToID string  `json:"inResponseToId,omitempty"`
+	Pattern        string  `json:"pattern,omitempty"`
 	StartedAt      *string `json:"startedAt,omitempty"`
 	EndedAt        *string `json:"endedAt,omitempty"`
 	DurationMs     *int    `json:"durationMs,omitempty"`
@@ -67,6 +69,9 @@ func toInteractionResponse(callerID string, i Interaction) interactionResponse {
 	}
 	if i.InResponseToID != nil {
 		resp.InResponseToID = *i.InResponseToID
+	}
+	if i.Pattern != nil {
+		resp.Pattern = *i.Pattern
 	}
 	if i.StartedAt != nil {
 		s := i.StartedAt.UTC().Format(timeFormat)
@@ -174,6 +179,45 @@ func pulseBackHandler(svc *Service, newCore CoreFactory, newPresence PresenceFac
 			return
 		}
 		i, err := svc.PulseBack(r.Context(), newCore(client), newPresence(token), newNotifier(client), callerID, r.PathValue("id"))
+		if err != nil {
+			writeDomainError(w, r, err)
+			return
+		}
+		httpx.JSON(w, http.StatusCreated, toInteractionResponse(callerID, i))
+	}
+}
+
+// knockHandler needs the same three per-caller resources pulseBackHandler
+// does, since Knock is also Create+Start+Stop in one API call (spec §18:
+// "quicker, lighter... a nudge, not a hold" - delivered as a single
+// request, not a client-timed hold gesture).
+func knockHandler(svc *Service, newCore CoreFactory, newPresence PresenceFactory, newNotifier NotifierFactory) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		callerID, ok := pulseauth.FromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller missing from context"))
+			return
+		}
+		client, ok := pulseauth.ClientFromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "core client missing from context"))
+			return
+		}
+		token, ok := pulseauth.TokenFromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller token missing from context"))
+			return
+		}
+		var body struct {
+			ReceiverID string `json:"receiverId"`
+			Pattern    string `json:"pattern"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			apperr.Write(w, r, apperr.New(apperr.CodeValidation, "invalid JSON body"))
+			return
+		}
+		in := KnockInput{ReceiverID: body.ReceiverID, Pattern: KnockPattern(body.Pattern)}
+		i, err := svc.Knock(r.Context(), newCore(client), newPresence(token), newNotifier(client), callerID, in)
 		if err != nil {
 			writeDomainError(w, r, err)
 			return

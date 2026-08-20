@@ -17,11 +17,18 @@ import (
 
 type Type string
 
-// TypePulse is the only interaction type this phase creates. Knock
-// (Phase 7), CustomSignal (Phase 11), LiveTouch (Phase 10), and
-// MoodResponse (Phase 8) reuse this same state machine and table in
-// later phases, not a parallel one.
-const TypePulse Type = "pulse"
+// TypePulse and TypeKnock share exactly one state machine and one
+// table - CustomSignal (Phase 11), LiveTouch (Phase 10), and
+// MoodResponse (Phase 8) will too. Start/Stop's actual logic (presence
+// check, delivery-mode decision, authorization) is 100% shared; only
+// the realtime event name, notification content, and analytics event
+// differ per Type (see Stop's own type switch) - this is the
+// "extensible architecture" Phase 7 was explicitly asked to leave
+// behind for Phase 11's custom signals.
+const (
+	TypePulse Type = "pulse"
+	TypeKnock Type = "knock"
+)
 
 type Status string
 
@@ -67,10 +74,16 @@ type Interaction struct {
 	// InResponseToID links a Pulse Back (spec §17) to the original
 	// interaction it's reciprocating - nil for an ordinary Pulse.
 	InResponseToID *string
-	DeliveryMode   DeliveryMode
-	Status         Status
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// Pattern is only meaningful for TypeKnock this phase - a name from
+	// a small predefined set (spec §18), not yet the free-form
+	// tap/hold/pause segment array Phase 11's Custom Signals will add.
+	// A plain nullable string, not KnockPattern, so this same field can
+	// hold whatever later phases need without another migration.
+	Pattern      *string
+	DeliveryMode DeliveryMode
+	Status       Status
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 func (i Interaction) otherUser(callerID string) string {
@@ -147,13 +160,16 @@ type Presence interface {
 // notifications.Send (spec §71: "Pulse must not call APNs/FCM
 // directly"), resolved per-caller so the send is attributed to the
 // real sender (see notifications/README.md for why cross-user Send is
-// now allowed at all). Content is deliberately generic ("New Pulse",
-// spec §72's Private tier default) rather than naming the sender - that
-// needs pulse-profile's handle, a cross-module dependency not worth
-// taking on for this phase's actual requirement (a real push arrives at
-// all), and content-level privacy preferences are Phase 13's job.
+// now allowed at all). One generic method, not one per interaction Type
+// (NotifyPulseReceived, then NotifyKnockReceived, then a third for
+// Phase 8's Mood Response...) - category/title/body are the caller's
+// job to choose, matching Stop's own type switch. Content is
+// deliberately generic ("New Pulse"/"Knock", spec §72's Private tier
+// default) rather than naming the sender - that needs pulse-profile's
+// handle, a cross-module dependency not worth taking on yet, and
+// content-level privacy preferences are Phase 13's job.
 type Notifier interface {
-	NotifyPulseReceived(ctx context.Context, receiverUserID string, durationMs int) error
+	Notify(ctx context.Context, receiverUserID, category, title, body string, data map[string]any) error
 }
 
 // RateLimiter is satisfied directly by platformkit/ratelimit.Limiter -
@@ -188,6 +204,8 @@ type CreateInput struct {
 	// reciprocation link (see http.go: only PulseBack's own handler
 	// sets this, createHandler never reads it from the request).
 	InResponseToID string
+	// Pattern is set internally by Knock - see Interaction.Pattern.
+	Pattern string
 }
 
 func (in CreateInput) Validate() error {
@@ -195,4 +213,32 @@ func (in CreateInput) Validate() error {
 		return &ValidationError{Message: "receiverId is required"}
 	}
 	return nil
+}
+
+// KnockPattern is a name from the small predefined set spec §18 names
+// (••, •••, — •, • — •) - not yet the free-form segment array Phase
+// 11's Custom Signals will add, but a plain string field on Interaction
+// (not this type) so that later addition needs no new column.
+type KnockPattern string
+
+const (
+	KnockPatternDoubleTap      KnockPattern = "double_tap"       // •• - spec §18's own default example
+	KnockPatternTripleTap      KnockPattern = "triple_tap"       // •••
+	KnockPatternLongShort      KnockPattern = "long_short"       // — •
+	KnockPatternShortLongShort KnockPattern = "short_long_short" // • — •
+)
+
+func (p KnockPattern) valid() bool {
+	switch p {
+	case KnockPatternDoubleTap, KnockPatternTripleTap, KnockPatternLongShort, KnockPatternShortLongShort:
+		return true
+	default:
+		return false
+	}
+}
+
+type KnockInput struct {
+	ReceiverID string
+	// Pattern defaults to KnockPatternDoubleTap when empty.
+	Pattern KnockPattern
 }
