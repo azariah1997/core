@@ -68,3 +68,28 @@ func (a BondAdapter) MyActiveBond(ctx context.Context, callerID string) (mood.Bo
 	}
 	return mood.BondRef{UserAID: b.UserAID, UserBID: b.UserBID}, nil
 }
+
+// CirclesAdapter adapts pulse-connections' real Circle-wrapping
+// *Service methods - plus the caller's own CoreGroups, built the exact
+// same way pulse-connections' own http.go builds it - onto mood.Circles
+// (Phase 9: Close Friends & Circles).
+type CirclesAdapter struct {
+	svc    *pulseconnections.Service
+	groups pulseconnections.CoreGroups
+}
+
+func NewCirclesAdapter(svc *pulseconnections.Service, groups pulseconnections.CoreGroups) CirclesAdapter {
+	return CirclesAdapter{svc: svc, groups: groups}
+}
+
+func (a CirclesAdapter) ListMembers(ctx context.Context, callerID, circleID string) ([]string, error) {
+	members, err := a.svc.ListCircleMembers(ctx, a.groups, circleID)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(members))
+	for _, m := range members {
+		ids = append(ids, m.UserID)
+	}
+	return ids, nil
+}

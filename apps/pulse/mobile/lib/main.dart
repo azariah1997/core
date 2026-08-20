@@ -250,7 +250,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     final pages = [
       _HomeTab(pulseApi: widget.pulseApi, haptics: _haptics),
-      const _PlaceholderTab(title: 'People', subtitle: 'Partner Bond, Close Friends, Friends, Circles — Phase 9'),
+      _PeopleTab(pulseApi: widget.pulseApi),
       _MoodTab(pulseApi: widget.pulseApi),
       const _PlaceholderTab(title: 'Moments', subtitle: 'Saved shared moments, no chat — Phase 12'),
       _ProfileTab(pulseApi: widget.pulseApi),
@@ -547,10 +547,12 @@ class _MoodTab extends StatefulWidget {
 
 class _MoodTabState extends State<_MoodTab> {
   static const _emojis = ['☀️', '🌧️', '🌙', '🔥', '🌊', '🫂', '❤️', '💤'];
-  static const _audiences = ['private', 'partner_only', 'close_friends', 'all_connections'];
+  static const _audiences = ['private', 'partner_only', 'close_friends', 'all_connections', 'selected_circles'];
 
   String? _selectedEmoji;
   String _selectedAudience = 'all_connections';
+  List<PulseCircle> _circles = [];
+  String? _selectedCircleId;
   PulseMood? _current;
   bool _loading = true;
   String? _error;
@@ -560,6 +562,7 @@ class _MoodTabState extends State<_MoodTab> {
   void initState() {
     super.initState();
     _loadCurrent();
+    _loadCircles();
   }
 
   Future<void> _loadCurrent() async {
@@ -574,15 +577,33 @@ class _MoodTabState extends State<_MoodTab> {
     }
   }
 
+  Future<void> _loadCircles() async {
+    try {
+      final circles = await widget.pulseApi.listCircles();
+      if (mounted) setState(() => _circles = circles);
+    } catch (_) {
+      // Circles are optional for Mood - an empty list just means the
+      // selected_circles option has nothing to pick from yet.
+    }
+  }
+
   Future<void> _set() async {
     final emoji = _selectedEmoji;
     if (emoji == null) return;
+    if (_selectedAudience == 'selected_circles' && _selectedCircleId == null) {
+      setState(() => _error = 'Pick a Circle first');
+      return;
+    }
     setState(() {
       _status = null;
       _error = null;
     });
     try {
-      final m = await widget.pulseApi.setMood(emoji, _selectedAudience);
+      final m = await widget.pulseApi.setMood(
+        emoji,
+        _selectedAudience,
+        circleId: _selectedAudience == 'selected_circles' ? _selectedCircleId : null,
+      );
       setState(() {
         _current = m;
         _status = 'Mood set';
@@ -651,6 +672,20 @@ class _MoodTabState extends State<_MoodTab> {
               onChanged: (v) => setState(() => _selectedAudience = v ?? _selectedAudience),
             ),
           ),
+          if (_selectedAudience == 'selected_circles') ...[
+            const SizedBox(height: 8),
+            Center(
+              child: _circles.isEmpty
+                  ? Text('No Circles yet — create one on the People tab.', style: Theme.of(context).textTheme.bodySmall)
+                  : DropdownButton<String>(
+                      key: const Key('moodCircleDropdown'),
+                      hint: const Text('Pick a Circle'),
+                      value: _selectedCircleId,
+                      items: _circles.map((c) => DropdownMenuItem(value: c.id, child: Text(c.name))).toList(),
+                      onChanged: (v) => setState(() => _selectedCircleId = v),
+                    ),
+            ),
+          ],
           const SizedBox(height: 16),
           FilledButton(
             key: const Key('setMoodButton'),
@@ -665,6 +700,204 @@ class _MoodTabState extends State<_MoodTab> {
             const SizedBox(height: 12),
             Center(child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Circles (product spec §10, Phase 9): custom groups - "Closest
+/// Friends, Family, University, Work Friends, Gaming Friends, Custom" -
+/// that primarily control Mood audience. A thin UI over Pulse's own
+/// pulse-connections wrapper around Core's real groups capability;
+/// membership is restricted server-side to real, active connections
+/// (never a stranger), so this widget only ever offers existing
+/// connections in the "add member" picker.
+class _PeopleTab extends StatefulWidget {
+  final PulseApi pulseApi;
+  const _PeopleTab({required this.pulseApi});
+
+  @override
+  State<_PeopleTab> createState() => _PeopleTabState();
+}
+
+class _PeopleTabState extends State<_PeopleTab> {
+  List<PulseCircle> _circles = [];
+  List<PulseConnection> _connections = [];
+  bool _loading = true;
+  String? _error;
+  final _newCircleName = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final circles = await widget.pulseApi.listCircles();
+      final connections = await widget.pulseApi.listConnections();
+      setState(() {
+        _circles = circles;
+        _connections = connections.where((c) => c.status == 'active').toList();
+        _loading = false;
+      });
+    } catch (err) {
+      setState(() {
+        _error = '$err';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _createCircle() async {
+    final name = _newCircleName.text.trim();
+    if (name.isEmpty) return;
+    try {
+      final circle = await widget.pulseApi.createCircle(name);
+      setState(() => _circles = [..._circles, circle]);
+      _newCircleName.clear();
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Circles', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 4),
+        Text(
+          'Custom groups — Family, Work Friends, Closest Friends — that control Mood audience.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                key: const Key('newCircleNameField'),
+                controller: _newCircleName,
+                decoration: const InputDecoration(labelText: 'New Circle name'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(key: const Key('createCircleButton'), onPressed: _createCircle, child: const Text('Create')),
+          ],
+        ),
+        const SizedBox(height: 16),
+        if (_error != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        if (_circles.isEmpty) const Text('No Circles yet.'),
+        for (final circle in _circles) _CircleTile(key: ValueKey(circle.id), pulseApi: widget.pulseApi, circle: circle, connections: _connections),
+      ],
+    );
+  }
+}
+
+class _CircleTile extends StatefulWidget {
+  final PulseApi pulseApi;
+  final PulseCircle circle;
+  final List<PulseConnection> connections;
+  const _CircleTile({super.key, required this.pulseApi, required this.circle, required this.connections});
+
+  @override
+  State<_CircleTile> createState() => _CircleTileState();
+}
+
+class _CircleTileState extends State<_CircleTile> {
+  List<PulseCircleMember>? _members;
+  String? _selectedToAdd;
+  String? _error;
+
+  Future<void> _loadMembers() async {
+    try {
+      final members = await widget.pulseApi.listCircleMembers(widget.circle.id);
+      if (mounted) setState(() => _members = members);
+    } catch (err) {
+      if (mounted) setState(() => _error = '$err');
+    }
+  }
+
+  Future<void> _addMember() async {
+    final userId = _selectedToAdd;
+    if (userId == null) return;
+    try {
+      await widget.pulseApi.addCircleMember(widget.circle.id, userId);
+      await _loadMembers();
+      setState(() => _selectedToAdd = null);
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  Future<void> _removeMember(String userId) async {
+    try {
+      await widget.pulseApi.removeCircleMember(widget.circle.id, userId);
+      await _loadMembers();
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final members = _members;
+    final memberIds = members?.map((m) => m.userId).toSet() ?? const <String>{};
+    final addable = widget.connections.where((c) => !memberIds.contains(c.otherUserId)).toList();
+    return Card(
+      child: ExpansionTile(
+        key: PageStorageKey(widget.circle.id),
+        title: Text(widget.circle.name),
+        onExpansionChanged: (expanded) {
+          if (expanded && members == null) _loadMembers();
+        },
+        children: [
+          if (members == null)
+            const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())
+          else ...[
+            for (final m in members)
+              ListTile(
+                dense: true,
+                title: Text(m.userId.substring(0, 8)),
+                trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => _removeMember(m.userId)),
+              ),
+            if (addable.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButton<String>(
+                        key: const Key('addCircleMemberDropdown'),
+                        hint: const Text('Add a connection'),
+                        value: _selectedToAdd,
+                        isExpanded: true,
+                        items: addable.map((c) => DropdownMenuItem(value: c.otherUserId, child: Text(c.otherUserId.substring(0, 8)))).toList(),
+                        onChanged: (v) => setState(() => _selectedToAdd = v),
+                      ),
+                    ),
+                    IconButton(
+                      key: const Key('addCircleMemberButton'),
+                      icon: const Icon(Icons.add),
+                      onPressed: _selectedToAdd == null ? null : _addMember,
+                    ),
+                  ],
+                ),
+              ),
+          ],
+          if (_error != null)
+            Padding(padding: const EdgeInsets.all(16), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+          const SizedBox(height: 8),
         ],
       ),
     );

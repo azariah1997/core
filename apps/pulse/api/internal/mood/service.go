@@ -22,12 +22,12 @@ func NewService(repo Repository, bond Bond, analytics Analytics) *Service {
 
 // Set is Today's Mood's one mutation - creates or replaces the caller's
 // current Mood, resolving Audience into a concrete AllowedViewerIDs
-// snapshot right now, under the caller's own real connections/bond
-// state (see Mood's own doc comment for why this can't happen later,
-// per-viewer). connections is per-request (built from the caller's own
-// authenticated client, like every other module's CoreRelationships),
-// unlike bond above.
-func (s *Service) Set(ctx context.Context, connections Connections, callerID, timezone string, in SetInput) (Mood, error) {
+// snapshot right now, under the caller's own real connections/bond/
+// Circle state (see Mood's own doc comment for why this can't happen
+// later, per-viewer). connections and circles are both per-request
+// (built from the caller's own authenticated client, like every other
+// module's CoreRelationships), unlike bond above.
+func (s *Service) Set(ctx context.Context, connections Connections, circles Circles, callerID, timezone string, in SetInput) (Mood, error) {
 	if err := in.Validate(); err != nil {
 		return Mood{}, err
 	}
@@ -44,7 +44,7 @@ func (s *Service) Set(ctx context.Context, connections Connections, callerID, ti
 		return Mood{}, err
 	}
 
-	allowed, err := s.resolveAudience(ctx, connections, callerID, in)
+	allowed, err := s.resolveAudience(ctx, connections, circles, callerID, in)
 	if err != nil {
 		return Mood{}, err
 	}
@@ -52,6 +52,10 @@ func (s *Service) Set(ctx context.Context, connections Connections, callerID, ti
 	m := Mood{
 		UserID: callerID, Emoji: in.Emoji, Audience: in.Audience, AllowedViewerIDs: allowed,
 		CreatedAt: createdAt, ExpiresAt: nextLocalMidnight(now, timezone), UpdatedAt: now,
+	}
+	if in.Audience == AudienceSelectedCircles {
+		circleID := in.CircleID
+		m.CircleID = &circleID
 	}
 	saved, err := s.repo.Set(ctx, m)
 	if err != nil {
@@ -63,7 +67,7 @@ func (s *Service) Set(ctx context.Context, connections Connections, callerID, ti
 	return saved, nil
 }
 
-func (s *Service) resolveAudience(ctx context.Context, connections Connections, callerID string, in SetInput) ([]string, error) {
+func (s *Service) resolveAudience(ctx context.Context, connections Connections, circles Circles, callerID string, in SetInput) ([]string, error) {
 	switch in.Audience {
 	case AudiencePartnerOnly:
 		b, err := s.bond.MyActiveBond(ctx, callerID)
@@ -114,6 +118,24 @@ func (s *Service) resolveAudience(ctx context.Context, connections Connections, 
 			// might supply (the same authorization discipline
 			// pulse-interactions' own connection check enforces).
 			if active[id] {
+				allowed = append(allowed, id)
+			}
+		}
+		return allowed, nil
+
+	case AudienceSelectedCircles:
+		members, err := circles.ListMembers(ctx, callerID, in.CircleID)
+		if err != nil {
+			return nil, err
+		}
+		var allowed []string
+		for _, id := range members {
+			// The circle membership itself already includes the caller
+			// (Core's real groups.Create seeds the creator as a manager
+			// member) - exclude them from AllowedViewerIDs since
+			// CanView already grants the owner unconditionally, and
+			// nothing else should ever compare a userID to itself here.
+			if id != callerID {
 				allowed = append(allowed, id)
 			}
 		}

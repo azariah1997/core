@@ -73,6 +73,57 @@ func (f *fakeCoreRelationships) ListMine(ctx context.Context, relType string) ([
 	return out, nil
 }
 
+// fakeCoreGroups is an in-memory stand-in for Core's real groups API -
+// the real coresdk-backed adapter (internal/pulseconnections/core) is
+// exercised by the http_test.go real-router tests and live curl
+// validation, the same split fakeCoreRelationships above uses.
+type fakeCoreGroups struct {
+	byID    map[string]pulseconnections.Circle
+	members map[string][]pulseconnections.CircleMember
+	next    int
+}
+
+func newFakeCoreGroups() *fakeCoreGroups {
+	return &fakeCoreGroups{byID: map[string]pulseconnections.Circle{}, members: map[string][]pulseconnections.CircleMember{}}
+}
+
+func (f *fakeCoreGroups) Create(ctx context.Context, name string) (pulseconnections.Circle, error) {
+	f.next++
+	id := fmt.Sprintf("circle-%d", f.next)
+	c := pulseconnections.Circle{ID: id, Name: name, Status: "active", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	f.byID[id] = c
+	return c, nil
+}
+
+func (f *fakeCoreGroups) ListMine(ctx context.Context) ([]pulseconnections.Circle, error) {
+	out := make([]pulseconnections.Circle, 0, len(f.byID))
+	for _, c := range f.byID {
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+func (f *fakeCoreGroups) ListMembers(ctx context.Context, circleID string) ([]pulseconnections.CircleMember, error) {
+	return f.members[circleID], nil
+}
+
+func (f *fakeCoreGroups) AddMember(ctx context.Context, circleID, userID string) (pulseconnections.CircleMember, error) {
+	m := pulseconnections.CircleMember{UserID: userID, CreatedAt: time.Now().UTC()}
+	f.members[circleID] = append(f.members[circleID], m)
+	return m, nil
+}
+
+func (f *fakeCoreGroups) RemoveMember(ctx context.Context, circleID, userID string) error {
+	var kept []pulseconnections.CircleMember
+	for _, m := range f.members[circleID] {
+		if m.UserID != userID {
+			kept = append(kept, m)
+		}
+	}
+	f.members[circleID] = kept
+	return nil
+}
+
 func newService() *pulseconnections.Service {
 	return pulseconnections.NewService(memory.New())
 }
@@ -155,5 +206,73 @@ func TestSetClassificationIsPerOwnerAndReflectedInListMine(t *testing.T) {
 	}
 	if len(theirs) != 1 || theirs[0].Classification != pulseconnections.ClassificationFriend {
 		t.Fatalf("expected the other side's default classification to remain friend, got %+v", theirs)
+	}
+}
+
+func TestCreateCircleRejectsAnEmptyName(t *testing.T) {
+	svc := newService()
+	_, err := svc.CreateCircle(context.Background(), newFakeCoreGroups(), pulseconnections.CreateCircleInput{Name: "  "})
+	var verr *pulseconnections.ValidationError
+	if !errors.As(err, &verr) {
+		t.Fatalf("expected ValidationError, got %v", err)
+	}
+}
+
+func TestAddCircleMemberRequiresAnActiveConnection(t *testing.T) {
+	svc := newService()
+	groups := newFakeCoreGroups()
+	circle, err := svc.CreateCircle(context.Background(), groups, pulseconnections.CreateCircleInput{Name: "Family"})
+	if err != nil {
+		t.Fatalf("create circle: %v", err)
+	}
+	// No relationship exists between caller-1 and user-2 at all.
+	_, err = svc.AddCircleMember(context.Background(), groups, newFakeCoreRelationships(), circle.ID, "user-2")
+	if !errors.Is(err, pulseconnections.ErrNotConnected) {
+		t.Fatalf("expected ErrNotConnected, got %v", err)
+	}
+}
+
+func TestAddCircleMemberSucceedsForARealActiveConnection(t *testing.T) {
+	svc := newService()
+	groups := newFakeCoreGroups()
+	core := newFakeCoreRelationships()
+
+	circle, err := svc.CreateCircle(context.Background(), groups, pulseconnections.CreateCircleInput{Name: "Family"})
+	if err != nil {
+		t.Fatalf("create circle: %v", err)
+	}
+	created, err := svc.RequestConnection(context.Background(), core, "caller-1", pulseconnections.RequestInput{TargetUserID: "user-2"})
+	if err != nil {
+		t.Fatalf("request connection: %v", err)
+	}
+	if _, err := svc.Accept(context.Background(), core, "user-2", created.RelationshipID); err != nil {
+		t.Fatalf("accept: %v", err)
+	}
+
+	member, err := svc.AddCircleMember(context.Background(), groups, core, circle.ID, "user-2")
+	if err != nil {
+		t.Fatalf("expected a real active connection to be addable to a Circle, got %v", err)
+	}
+	if member.UserID != "user-2" {
+		t.Fatalf("expected the real added member, got %+v", member)
+	}
+
+	members, err := svc.ListCircleMembers(context.Background(), groups, circle.ID)
+	if err != nil {
+		t.Fatalf("list circle members: %v", err)
+	}
+	if len(members) != 1 || members[0].UserID != "user-2" {
+		t.Fatalf("expected user-2 in the Circle's member list, got %+v", members)
+	}
+
+	if err := svc.RemoveCircleMember(context.Background(), groups, circle.ID, "user-2"); err != nil {
+		t.Fatalf("remove circle member: %v", err)
+	}
+	members, err = svc.ListCircleMembers(context.Background(), groups, circle.ID)
+	if err != nil {
+		t.Fatalf("list circle members after remove: %v", err)
+	}
+	if len(members) != 0 {
+		t.Fatalf("expected the Circle to have no members after remove, got %+v", members)
 	}
 }

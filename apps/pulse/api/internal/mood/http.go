@@ -23,8 +23,12 @@ const timeFormat = "2006-01-02T15:04:05.000Z07:00"
 // exists for.
 type ConnectionsFactory func(client *coresdk.Client) Connections
 
-func RegisterRoutes(mux *http.ServeMux, svc *Service, newConnections ConnectionsFactory, requireUser func(http.Handler) http.Handler) {
-	mux.Handle("PUT /v1/pulse/mood", requireUser(setHandler(svc, newConnections)))
+// CirclesFactory builds a Circles bound to one caller's authenticated
+// client - same reason as ConnectionsFactory.
+type CirclesFactory func(client *coresdk.Client) Circles
+
+func RegisterRoutes(mux *http.ServeMux, svc *Service, newConnections ConnectionsFactory, newCircles CirclesFactory, requireUser func(http.Handler) http.Handler) {
+	mux.Handle("PUT /v1/pulse/mood", requireUser(setHandler(svc, newConnections, newCircles)))
 	mux.Handle("DELETE /v1/pulse/mood", requireUser(clearHandler(svc)))
 	mux.Handle("GET /v1/pulse/mood/me", requireUser(myMoodHandler(svc)))
 	mux.Handle("GET /v1/pulse/mood/{userId}", requireUser(getHandler(svc)))
@@ -38,6 +42,7 @@ type moodResponse struct {
 	// looking at this Mood (see toMoodResponse).
 	Audience      string   `json:"audience,omitempty"`
 	CustomUserIDs []string `json:"customUserIds,omitempty"`
+	CircleID      string   `json:"circleId,omitempty"`
 	CreatedAt     string   `json:"createdAt"`
 	ExpiresAt     string   `json:"expiresAt"`
 	UpdatedAt     string   `json:"updatedAt,omitempty"`
@@ -54,11 +59,14 @@ func toMoodResponse(m Mood, ownerDetail bool) moodResponse {
 		if m.Audience == AudienceCustomUsers {
 			resp.CustomUserIDs = m.AllowedViewerIDs
 		}
+		if m.Audience == AudienceSelectedCircles && m.CircleID != nil {
+			resp.CircleID = *m.CircleID
+		}
 	}
 	return resp
 }
 
-func setHandler(svc *Service, newConnections ConnectionsFactory) http.HandlerFunc {
+func setHandler(svc *Service, newConnections ConnectionsFactory, newCircles CirclesFactory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		callerID, ok := pulseauth.FromContext(r.Context())
 		if !ok {
@@ -78,13 +86,14 @@ func setHandler(svc *Service, newConnections ConnectionsFactory) http.HandlerFun
 			Emoji         string   `json:"emoji"`
 			Audience      string   `json:"audience"`
 			CustomUserIDs []string `json:"customUserIds"`
+			CircleID      string   `json:"circleId"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			apperr.Write(w, r, apperr.New(apperr.CodeValidation, "invalid JSON body"))
 			return
 		}
-		in := SetInput{Emoji: Emoji(body.Emoji), Audience: Audience(body.Audience), CustomUserIDs: body.CustomUserIDs}
-		m, err := svc.Set(r.Context(), newConnections(client), callerID, timezone, in)
+		in := SetInput{Emoji: Emoji(body.Emoji), Audience: Audience(body.Audience), CustomUserIDs: body.CustomUserIDs, CircleID: body.CircleID}
+		m, err := svc.Set(r.Context(), newConnections(client), newCircles(client), callerID, timezone, in)
 		if err != nil {
 			writeDomainError(w, r, err)
 			return

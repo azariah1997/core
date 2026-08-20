@@ -57,7 +57,10 @@ func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, conne
 	newConnectionsCore := func(client *coresdk.Client) pulseconnections.CoreRelationships {
 		return pulseconnectionscore.New(client, cfg.PulseAppID)
 	}
-	pulseconnections.RegisterRoutes(mux, connectionsSvc, newConnectionsCore, requireUser)
+	newConnectionsGroups := func(client *coresdk.Client) pulseconnections.CoreGroups {
+		return pulseconnectionscore.NewGroupsAdapter(client, cfg.PulseAppID)
+	}
+	pulseconnections.RegisterRoutes(mux, connectionsSvc, newConnectionsCore, newConnectionsGroups, requireUser)
 
 	newBondCore := func(client *coresdk.Client) bond.CoreRelationships {
 		return bondcore.New(client, cfg.PulseAppID)
@@ -78,7 +81,10 @@ func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, conne
 	newMoodConnections := func(client *coresdk.Client) mood.Connections {
 		return pulsemodules.NewConnectionsAdapter(connectionsSvc, newConnectionsCore(client))
 	}
-	mood.RegisterRoutes(mux, moodSvc, newMoodConnections, requireUser)
+	newMoodCircles := func(client *coresdk.Client) mood.Circles {
+		return pulsemodules.NewCirclesAdapter(connectionsSvc, newConnectionsGroups(client))
+	}
+	mood.RegisterRoutes(mux, moodSvc, newMoodConnections, newMoodCircles, requireUser)
 
 	return metrics.Middleware(serviceName, mux, corsMiddleware(correlation.Middleware(mux)))
 }

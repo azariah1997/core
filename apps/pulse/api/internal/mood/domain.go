@@ -16,6 +16,7 @@ package mood
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -47,27 +48,25 @@ func (e Emoji) valid() bool {
 
 type Audience string
 
-// Five of spec §25's six audience values are implemented this phase -
-// everything resolvable from capabilities Pulse already has (bond's own
+// All six of spec §25's audience values are implemented. Five resolve
+// from capabilities Pulse already had going into Phase 8 (bond's own
 // active-partner record, pulse-connections' Friend/Close-Friend
-// classification, or a caller-supplied user list). AudienceSelectedCircles
-// is deliberately not implemented: it needs Core's real groups capability,
-// which Pulse has never touched yet and which Phase 9 (Close Friends &
-// Circles) is explicitly the phase that integrates - matching this
-// codebase's established pattern of an honest, documented gap rather
-// than a fake/partial implementation (see e.g. KnockPattern's own
-// Phase-11 deferral).
+// classification, or a caller-supplied user list); AudienceSelectedCircles
+// (Phase 9) resolves against a real Core Group via pulse-connections'
+// own Circles wrapper (internal/pulseconnections' CoreGroups) - the
+// integration Phase 8 explicitly deferred until Circles existed.
 const (
-	AudiencePartnerOnly    Audience = "partner_only"
-	AudienceCloseFriends   Audience = "close_friends"
-	AudienceAllConnections Audience = "all_connections"
-	AudienceCustomUsers    Audience = "custom_users"
-	AudiencePrivate        Audience = "private"
+	AudiencePartnerOnly     Audience = "partner_only"
+	AudienceCloseFriends    Audience = "close_friends"
+	AudienceAllConnections  Audience = "all_connections"
+	AudienceCustomUsers     Audience = "custom_users"
+	AudiencePrivate         Audience = "private"
+	AudienceSelectedCircles Audience = "selected_circles"
 )
 
 func (a Audience) valid() bool {
 	switch a {
-	case AudiencePartnerOnly, AudienceCloseFriends, AudienceAllConnections, AudienceCustomUsers, AudiencePrivate:
+	case AudiencePartnerOnly, AudienceCloseFriends, AudienceAllConnections, AudienceCustomUsers, AudiencePrivate, AudienceSelectedCircles:
 		return true
 	default:
 		return false
@@ -91,9 +90,15 @@ type Mood struct {
 	Emoji            Emoji
 	Audience         Audience
 	AllowedViewerIDs []string
-	CreatedAt        time.Time
-	ExpiresAt        time.Time
-	UpdatedAt        time.Time
+	// CircleID is only meaningful for AudienceSelectedCircles - kept
+	// alongside the already-resolved AllowedViewerIDs purely for the
+	// owner's own management view (toMoodResponse), the same way
+	// CustomUserIDs is echoed back for AudienceCustomUsers; CanView
+	// itself never reads it, only AllowedViewerIDs.
+	CircleID  *string
+	CreatedAt time.Time
+	ExpiresAt time.Time
+	UpdatedAt time.Time
 }
 
 // CanView reports whether viewerID may see this Mood right now. The
@@ -175,6 +180,20 @@ func (b BondRef) otherUser(callerID string) string {
 // bond's Service through the Bond interface above).
 var ErrNoBond = errors.New("no active bond")
 
+// Circles resolves the caller's own real Circle membership - satisfied
+// by an adapter over pulse-connections' real Circle-wrapping *Service
+// methods (internal/mood/pulsemodules), never a duplicated copy of
+// Core's real groups data. ListMembers returning an error (the caller
+// isn't a member of circleID, or it doesn't exist) is treated by Set as
+// a validation failure - see resolveAudience's AudienceSelectedCircles
+// branch - since Core's own groups.ListMembers already enforces
+// membership server-side (see backend/core-api/internal/groups'
+// requireMember), so a non-member referencing someone else's Circle ID
+// fails honestly rather than silently resolving to an empty audience.
+type Circles interface {
+	ListMembers(ctx context.Context, callerID, circleID string) ([]string, error)
+}
+
 // Analytics records mood_set/mood_cleared (spec §103's "analytics
 // exists") via Core's real analytics ingest - a fixed, service-level
 // dependency (same shape as pulse-interactions' own Analytics), unlike
@@ -198,11 +217,13 @@ type Repository interface {
 }
 
 // SetInput is Set's request shape. CustomUserIDs is only meaningful
-// (and only read) when Audience is AudienceCustomUsers.
+// (and only read) when Audience is AudienceCustomUsers; CircleID only
+// when Audience is AudienceSelectedCircles.
 type SetInput struct {
 	Emoji         Emoji
 	Audience      Audience
 	CustomUserIDs []string
+	CircleID      string
 }
 
 func (in SetInput) Validate() error {
@@ -210,13 +231,19 @@ func (in SetInput) Validate() error {
 		return &ValidationError{Message: "emoji must be one of the predefined Mood symbols"}
 	}
 	if !in.Audience.valid() {
-		return &ValidationError{Message: "audience must be one of: partner_only, close_friends, all_connections, custom_users, private"}
+		return &ValidationError{Message: "audience must be one of: partner_only, close_friends, all_connections, custom_users, private, selected_circles"}
 	}
 	if in.Audience == AudienceCustomUsers && len(in.CustomUserIDs) == 0 {
 		return &ValidationError{Message: "customUserIds is required when audience is custom_users"}
 	}
 	if in.Audience != AudienceCustomUsers && len(in.CustomUserIDs) > 0 {
 		return &ValidationError{Message: "customUserIds is only meaningful when audience is custom_users"}
+	}
+	if in.Audience == AudienceSelectedCircles && strings.TrimSpace(in.CircleID) == "" {
+		return &ValidationError{Message: "circleId is required when audience is selected_circles"}
+	}
+	if in.Audience != AudienceSelectedCircles && in.CircleID != "" {
+		return &ValidationError{Message: "circleId is only meaningful when audience is selected_circles"}
 	}
 	return nil
 }

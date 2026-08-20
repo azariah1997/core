@@ -96,3 +96,62 @@ func (s *Service) SetClassification(ctx context.Context, callerID, relationshipI
 	}
 	return in.Classification, nil
 }
+
+// checkConnected mirrors pulse-interactions' own helper of the same
+// name and meaning: an active Friend or Bond connection, checked from
+// the caller's own real relationships (never a stranger, never a
+// blocked relationship, in either direction).
+func checkConnected(ctx context.Context, core CoreRelationships, otherUserID string) error {
+	for _, relType := range []string{RelationshipType, bondRelationshipType} {
+		rels, err := core.ListMine(ctx, relType)
+		if err != nil {
+			return err
+		}
+		for _, r := range rels {
+			if r.RequesterID != otherUserID && r.TargetID != otherUserID {
+				continue
+			}
+			if r.Status == "active" {
+				return nil
+			}
+		}
+	}
+	return ErrNotConnected
+}
+
+// CreateCircle creates a real Core Group scoped to Pulse's AppID - Core's
+// own Create already writes a manager membership for the creator in the
+// same transaction (backend/core-api/internal/groups' own guarantee:
+// "a group can never transiently exist with no manager"), so the caller
+// is already a member of their own new Circle with no separate call.
+func (s *Service) CreateCircle(ctx context.Context, groups CoreGroups, in CreateCircleInput) (Circle, error) {
+	if err := in.Validate(); err != nil {
+		return Circle{}, err
+	}
+	return groups.Create(ctx, in.Name)
+}
+
+func (s *Service) ListMyCircles(ctx context.Context, groups CoreGroups) ([]Circle, error) {
+	return groups.ListMine(ctx)
+}
+
+func (s *Service) ListCircleMembers(ctx context.Context, groups CoreGroups, circleID string) ([]CircleMember, error) {
+	return groups.ListMembers(ctx, circleID)
+}
+
+// AddCircleMember requires the caller and the target to already be a
+// real, active Pulse connection (product spec §10-11: Circles exist to
+// control interaction audience/permissions among people you're already
+// connected to, never a way to reach a stranger) - Core's own
+// authorization (the caller must be a Circle manager) is enforced
+// separately, server-side, by groups.AddMember itself.
+func (s *Service) AddCircleMember(ctx context.Context, groups CoreGroups, core CoreRelationships, circleID, targetUserID string) (CircleMember, error) {
+	if err := checkConnected(ctx, core, targetUserID); err != nil {
+		return CircleMember{}, err
+	}
+	return groups.AddMember(ctx, circleID, targetUserID)
+}
+
+func (s *Service) RemoveCircleMember(ctx context.Context, groups CoreGroups, circleID, targetUserID string) error {
+	return groups.RemoveMember(ctx, circleID, targetUserID)
+}

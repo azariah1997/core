@@ -36,6 +36,18 @@ func (f fakeBond) MyActiveBond(ctx context.Context, callerID string) (mood.BondR
 	return mood.BondRef{UserAID: callerID, UserBID: f.partnerID}, nil
 }
 
+type fakeCircles struct {
+	members map[string][]string
+	err     error
+}
+
+func (f fakeCircles) ListMembers(ctx context.Context, callerID, circleID string) ([]string, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
+	return f.members[circleID], nil
+}
+
 type fakeAnalytics struct {
 	mu     sync.Mutex
 	tracks []string
@@ -60,7 +72,7 @@ func newServiceWithAnalytics(bond mood.Bond) (*mood.Service, *fakeAnalytics) {
 
 func TestSetRejectsAnInvalidEmoji(t *testing.T) {
 	svc := newService(fakeBond{})
-	_, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: "🚀", Audience: mood.AudiencePrivate})
+	_, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: "🚀", Audience: mood.AudiencePrivate})
 	var validationErr *mood.ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("expected a ValidationError for an unrecognized emoji, got %v", err)
@@ -69,7 +81,7 @@ func TestSetRejectsAnInvalidEmoji(t *testing.T) {
 
 func TestSetRejectsAnInvalidAudience(t *testing.T) {
 	svc := newService(fakeBond{})
-	_, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: "everyone"})
+	_, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: "everyone"})
 	var validationErr *mood.ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("expected a ValidationError for an unrecognized audience, got %v", err)
@@ -78,7 +90,7 @@ func TestSetRejectsAnInvalidAudience(t *testing.T) {
 
 func TestSetRequiresCustomUserIDsForCustomAudience(t *testing.T) {
 	svc := newService(fakeBond{})
-	_, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudienceCustomUsers})
+	_, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudienceCustomUsers})
 	var validationErr *mood.ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("expected a ValidationError when custom_users has no customUserIds, got %v", err)
@@ -87,7 +99,7 @@ func TestSetRequiresCustomUserIDsForCustomAudience(t *testing.T) {
 
 func TestSetRejectsCustomUserIDsOnANonCustomAudience(t *testing.T) {
 	svc := newService(fakeBond{})
-	_, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate, CustomUserIDs: []string{"user-2"}})
+	_, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate, CustomUserIDs: []string{"user-2"}})
 	var validationErr *mood.ValidationError
 	if !errors.As(err, &validationErr) {
 		t.Fatalf("expected a ValidationError for customUserIds on a non-custom audience, got %v", err)
@@ -96,7 +108,7 @@ func TestSetRejectsCustomUserIDsOnANonCustomAudience(t *testing.T) {
 
 func TestSetPartnerOnlyResolvesToTheRealActiveBondPartner(t *testing.T) {
 	svc := newService(fakeBond{hasBond: true, partnerID: "partner-1"})
-	m, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiHeart, Audience: mood.AudiencePartnerOnly})
+	m, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiHeart, Audience: mood.AudiencePartnerOnly})
 	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
@@ -110,7 +122,7 @@ func TestSetPartnerOnlyResolvesToTheRealActiveBondPartner(t *testing.T) {
 
 func TestSetPartnerOnlyWithNoActiveBondIsVisibleToNoOneButTheOwner(t *testing.T) {
 	svc := newService(fakeBond{hasBond: false})
-	m, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiHeart, Audience: mood.AudiencePartnerOnly})
+	m, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiHeart, Audience: mood.AudiencePartnerOnly})
 	if err != nil {
 		t.Fatalf("expected Set to succeed even with no active bond, got %v", err)
 	}
@@ -129,7 +141,7 @@ func TestSetCloseFriendsFiltersToActiveCloseFriendClassification(t *testing.T) {
 		{OtherUserID: "inactive-close", Status: "pending", Classification: "close_friend"},
 	}}
 	svc := newService(fakeBond{})
-	m, err := svc.Set(context.Background(), conns, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiFire, Audience: mood.AudienceCloseFriends})
+	m, err := svc.Set(context.Background(), conns, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiFire, Audience: mood.AudienceCloseFriends})
 	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
@@ -151,7 +163,7 @@ func TestSetAllConnectionsIncludesEveryActiveConnectionRegardlessOfClassificatio
 		{OtherUserID: "removed", Status: "ended", Classification: "friend"},
 	}}
 	svc := newService(fakeBond{})
-	m, err := svc.Set(context.Background(), conns, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiWave, Audience: mood.AudienceAllConnections})
+	m, err := svc.Set(context.Background(), conns, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiWave, Audience: mood.AudienceAllConnections})
 	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
@@ -168,7 +180,7 @@ func TestSetCustomUsersOnlyIncludesRealActiveConnections(t *testing.T) {
 		{OtherUserID: "friend-1", Status: "active", Classification: "friend"},
 	}}
 	svc := newService(fakeBond{})
-	m, err := svc.Set(context.Background(), conns, "caller-1", "UTC", mood.SetInput{
+	m, err := svc.Set(context.Background(), conns, fakeCircles{}, "caller-1", "UTC", mood.SetInput{
 		Emoji: mood.EmojiMoon, Audience: mood.AudienceCustomUsers, CustomUserIDs: []string{"friend-1", "not-actually-connected"},
 	})
 	if err != nil {
@@ -185,7 +197,7 @@ func TestSetCustomUsersOnlyIncludesRealActiveConnections(t *testing.T) {
 func TestSetPrivateGrantsOnlyTheOwner(t *testing.T) {
 	conns := fakeConnections{conns: []mood.ConnectionRef{{OtherUserID: "friend-1", Status: "active", Classification: "close_friend"}}}
 	svc := newService(fakeBond{hasBond: true, partnerID: "partner-1"})
-	m, err := svc.Set(context.Background(), conns, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSleep, Audience: mood.AudiencePrivate})
+	m, err := svc.Set(context.Background(), conns, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSleep, Audience: mood.AudiencePrivate})
 	if err != nil {
 		t.Fatalf("set: %v", err)
 	}
@@ -199,7 +211,7 @@ func TestSetPrivateGrantsOnlyTheOwner(t *testing.T) {
 
 func TestGetHidesAMoodFromSomeoneOutsideItsAudience(t *testing.T) {
 	svc := newService(fakeBond{})
-	if _, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiRain, Audience: mood.AudiencePrivate}); err != nil {
+	if _, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiRain, Audience: mood.AudiencePrivate}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	if _, err := svc.Get(context.Background(), "stranger", "caller-1"); !errors.Is(err, mood.ErrNotFound) {
@@ -210,7 +222,7 @@ func TestGetHidesAMoodFromSomeoneOutsideItsAudience(t *testing.T) {
 func TestGetAllowsAnAudienceMemberToView(t *testing.T) {
 	conns := fakeConnections{conns: []mood.ConnectionRef{{OtherUserID: "friend-1", Status: "active", Classification: "friend"}}}
 	svc := newService(fakeBond{})
-	if _, err := svc.Set(context.Background(), conns, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiHug, Audience: mood.AudienceAllConnections}); err != nil {
+	if _, err := svc.Set(context.Background(), conns, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiHug, Audience: mood.AudienceAllConnections}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	got, err := svc.Get(context.Background(), "friend-1", "caller-1")
@@ -231,7 +243,7 @@ func TestMyMoodReturnsNotFoundWhenNoneIsSet(t *testing.T) {
 
 func TestClearRemovesTheMood(t *testing.T) {
 	svc := newService(fakeBond{})
-	if _, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate}); err != nil {
+	if _, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	if err := svc.Clear(context.Background(), "caller-1"); err != nil {
@@ -244,11 +256,11 @@ func TestClearRemovesTheMood(t *testing.T) {
 
 func TestSetPreservesCreatedAtWhenUpdatingAnAlreadyActiveMood(t *testing.T) {
 	svc := newService(fakeBond{})
-	first, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate})
+	first, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate})
 	if err != nil {
 		t.Fatalf("first set: %v", err)
 	}
-	second, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiFire, Audience: mood.AudiencePrivate})
+	second, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiFire, Audience: mood.AudiencePrivate})
 	if err != nil {
 		t.Fatalf("second set: %v", err)
 	}
@@ -262,7 +274,7 @@ func TestSetPreservesCreatedAtWhenUpdatingAnAlreadyActiveMood(t *testing.T) {
 
 func TestSetRecordsADurableMoodSetAnalyticsEvent(t *testing.T) {
 	svc, analytics := newServiceWithAnalytics(fakeBond{})
-	if _, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate}); err != nil {
+	if _, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	analytics.mu.Lock()
@@ -274,7 +286,7 @@ func TestSetRecordsADurableMoodSetAnalyticsEvent(t *testing.T) {
 
 func TestClearRecordsADurableMoodClearedAnalyticsEvent(t *testing.T) {
 	svc, analytics := newServiceWithAnalytics(fakeBond{})
-	if _, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate}); err != nil {
+	if _, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate}); err != nil {
 		t.Fatalf("set: %v", err)
 	}
 	if err := svc.Clear(context.Background(), "caller-1"); err != nil {
@@ -293,13 +305,58 @@ func TestClearRecordsADurableMoodClearedAnalyticsEvent(t *testing.T) {
 	}
 }
 
+func TestSetRequiresCircleIDForSelectedCirclesAudience(t *testing.T) {
+	svc := newService(fakeBond{})
+	_, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudienceSelectedCircles})
+	var validationErr *mood.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected a ValidationError when selected_circles has no circleId, got %v", err)
+	}
+}
+
+func TestSetRejectsCircleIDOnANonCircleAudience(t *testing.T) {
+	svc := newService(fakeBond{})
+	_, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate, CircleID: "circle-1"})
+	var validationErr *mood.ValidationError
+	if !errors.As(err, &validationErr) {
+		t.Fatalf("expected a ValidationError for circleId on a non-circle audience, got %v", err)
+	}
+}
+
+func TestSetSelectedCirclesResolvesToTheRealCircleMembership(t *testing.T) {
+	circles := fakeCircles{members: map[string][]string{"circle-1": {"caller-1", "member-1", "member-2"}}}
+	svc := newService(fakeBond{})
+	m, err := svc.Set(context.Background(), fakeConnections{}, circles, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiHug, Audience: mood.AudienceSelectedCircles, CircleID: "circle-1"})
+	if err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if !m.CanView("member-1", time.Now().UTC()) || !m.CanView("member-2", time.Now().UTC()) {
+		t.Fatalf("expected every real Circle member to see a selected_circles Mood")
+	}
+	if m.CanView("not-a-member", time.Now().UTC()) {
+		t.Fatalf("expected a non-member to be denied")
+	}
+	if m.CircleID == nil || *m.CircleID != "circle-1" {
+		t.Fatalf("expected CircleID to be recorded for the owner's own management view, got %v", m.CircleID)
+	}
+}
+
+func TestSetSelectedCirclesFailsWhenTheCallerIsNotAMemberOfTheReferencedCircle(t *testing.T) {
+	circles := fakeCircles{err: errors.New("forbidden: not a member of this group")}
+	svc := newService(fakeBond{})
+	_, err := svc.Set(context.Background(), fakeConnections{}, circles, "caller-1", "UTC", mood.SetInput{Emoji: mood.EmojiHug, Audience: mood.AudienceSelectedCircles, CircleID: "someone-elses-circle"})
+	if err == nil {
+		t.Fatalf("expected Set to fail honestly when the caller can't actually see the referenced Circle's membership")
+	}
+}
+
 func TestExpiryIsTheNextMidnightInTheCallersOwnTimezone(t *testing.T) {
 	svc := newService(fakeBond{})
 	loc, err := time.LoadLocation("Pacific/Auckland")
 	if err != nil {
 		t.Skipf("tzdata unavailable in this environment: %v", err)
 	}
-	m, err := svc.Set(context.Background(), fakeConnections{}, "caller-1", "Pacific/Auckland", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate})
+	m, err := svc.Set(context.Background(), fakeConnections{}, fakeCircles{}, "caller-1", "Pacific/Auckland", mood.SetInput{Emoji: mood.EmojiSun, Audience: mood.AudiencePrivate})
 	if err != nil {
 		t.Fatalf("set: %v", err)
 	}

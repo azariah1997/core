@@ -23,13 +23,16 @@ import (
 // interface, since internal/pulseconnections/core (the real adapter
 // under test here) talks to Core purely over HTTP.
 type fakeCoreServer struct {
-	mu   sync.Mutex
-	rels map[string]map[string]any
-	next int
+	mu        sync.Mutex
+	rels      map[string]map[string]any
+	groups    map[string]map[string]any
+	members   map[string][]map[string]any // groupID -> members
+	next      int
+	nextGroup int
 }
 
 func newFakeCoreServer(t *testing.T) *httptest.Server {
-	f := &fakeCoreServer{rels: map[string]map[string]any{}}
+	f := &fakeCoreServer{rels: map[string]map[string]any{}, groups: map[string]map[string]any{}, members: map[string][]map[string]any{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/relationships", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -90,6 +93,61 @@ func newFakeCoreServer(t *testing.T) *httptest.Server {
 		}
 		json.NewEncoder(w).Encode(map[string]any{"items": items})
 	})
+	mux.HandleFunc("POST /v1/groups", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			AppID string `json:"appId"`
+			Name  string `json:"name"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		f.nextGroup++
+		id := fmt.Sprintf("circle-%d", f.nextGroup)
+		now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00")
+		g := map[string]any{"id": id, "appId": body.AppID, "name": body.Name, "status": "active", "createdAt": now, "updatedAt": now}
+		f.groups[id] = g
+		f.mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(g)
+	})
+	mux.HandleFunc("GET /v1/groups", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		items := make([]map[string]any, 0, len(f.groups))
+		for _, g := range f.groups {
+			items = append(items, g)
+		}
+		json.NewEncoder(w).Encode(map[string]any{"items": items})
+	})
+	mux.HandleFunc("GET /v1/groups/{id}/members", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		json.NewEncoder(w).Encode(map[string]any{"items": f.members[r.PathValue("id")]})
+	})
+	mux.HandleFunc("POST /v1/groups/{id}/members", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			UserID string `json:"userId"`
+		}
+		json.NewDecoder(r.Body).Decode(&body)
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		now := time.Now().UTC().Format("2006-01-02T15:04:05.000Z07:00")
+		m := map[string]any{"userId": body.UserID, "role": "", "isManager": false, "createdAt": now}
+		f.members[r.PathValue("id")] = append(f.members[r.PathValue("id")], m)
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(m)
+	})
+	mux.HandleFunc("DELETE /v1/groups/{id}/members/{userId}", func(w http.ResponseWriter, r *http.Request) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		var kept []map[string]any
+		for _, m := range f.members[r.PathValue("id")] {
+			if m["userId"] != r.PathValue("userId") {
+				kept = append(kept, m)
+			}
+		}
+		f.members[r.PathValue("id")] = kept
+		w.WriteHeader(http.StatusNoContent)
+	})
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	return server
@@ -113,10 +171,16 @@ func newCoreFactory(pulseAppID string) pulseconnections.CoreFactory {
 	}
 }
 
+func newGroupsFactory(pulseAppID string) pulseconnections.GroupsFactory {
+	return func(client *coresdk.Client) pulseconnections.CoreGroups {
+		return pulseconnectionscore.NewGroupsAdapter(client, pulseAppID)
+	}
+}
+
 func TestRequestConnectionHandlerRejectsAMissingTarget(t *testing.T) {
 	svc := pulseconnections.NewService(memory.New())
 	mux := http.NewServeMux()
-	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
+	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newGroupsFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
 
 	req := httptest.NewRequest("POST", "/v1/pulse/connections/requests", strings.NewReader(`{}`))
 	rr := httptest.NewRecorder()
@@ -130,7 +194,7 @@ func TestRequestConnectionHandlerRejectsAMissingTarget(t *testing.T) {
 func TestRequestAndListConnectionsRoundTripThroughTheRealRouterAndAFakeCoreServer(t *testing.T) {
 	svc := pulseconnections.NewService(memory.New())
 	mux := http.NewServeMux()
-	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
+	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newGroupsFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
 
 	createReq := httptest.NewRequest("POST", "/v1/pulse/connections/requests", strings.NewReader(`{"targetUserId":"user-2"}`))
 	createRR := httptest.NewRecorder()
@@ -156,7 +220,7 @@ func TestRequestAndListConnectionsRoundTripThroughTheRealRouterAndAFakeCoreServe
 func TestSetClassificationHandlerRejectsAnInvalidValue(t *testing.T) {
 	svc := pulseconnections.NewService(memory.New())
 	mux := http.NewServeMux()
-	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
+	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newGroupsFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
 
 	req := httptest.NewRequest("PATCH", "/v1/pulse/connections/rel-1", strings.NewReader(`{"classification":"nonsense"}`))
 	rr := httptest.NewRecorder()
@@ -167,10 +231,77 @@ func TestSetClassificationHandlerRejectsAnInvalidValue(t *testing.T) {
 	}
 }
 
+func TestAddCircleMemberRequiresAnExistingConnection(t *testing.T) {
+	svc := pulseconnections.NewService(memory.New())
+	mux := http.NewServeMux()
+	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newGroupsFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
+
+	createRR := httptest.NewRecorder()
+	mux.ServeHTTP(createRR, httptest.NewRequest("POST", "/v1/pulse/circles", strings.NewReader(`{"name":"Family"}`)))
+	var circle struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(createRR.Body.Bytes(), &circle)
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/pulse/circles/"+circle.ID+"/members", strings.NewReader(`{"userId":"stranger"}`)))
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for adding a non-connection to a Circle, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestCircleMembershipRoundTripsForARealConnectionThroughTheRealRouter(t *testing.T) {
+	svc := pulseconnections.NewService(memory.New())
+	mux := http.NewServeMux()
+	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newGroupsFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
+
+	createConnRR := httptest.NewRecorder()
+	mux.ServeHTTP(createConnRR, httptest.NewRequest("POST", "/v1/pulse/connections/requests", strings.NewReader(`{"targetUserId":"user-2"}`)))
+	var conn struct {
+		RelationshipID string `json:"relationshipId"`
+	}
+	json.Unmarshal(createConnRR.Body.Bytes(), &conn)
+	mux.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("POST", "/v1/pulse/connections/requests/"+conn.RelationshipID+"/accept", nil))
+
+	createCircleRR := httptest.NewRecorder()
+	mux.ServeHTTP(createCircleRR, httptest.NewRequest("POST", "/v1/pulse/circles", strings.NewReader(`{"name":"Family"}`)))
+	if createCircleRR.Code != http.StatusCreated {
+		t.Fatalf("expected 201 creating a Circle, got %d: %s", createCircleRR.Code, createCircleRR.Body.String())
+	}
+	var circle struct {
+		ID string `json:"id"`
+	}
+	json.Unmarshal(createCircleRR.Body.Bytes(), &circle)
+
+	addRR := httptest.NewRecorder()
+	mux.ServeHTTP(addRR, httptest.NewRequest("POST", "/v1/pulse/circles/"+circle.ID+"/members", strings.NewReader(`{"userId":"user-2"}`)))
+	if addRR.Code != http.StatusCreated {
+		t.Fatalf("expected 201 adding a real connection as a Circle member, got %d: %s", addRR.Code, addRR.Body.String())
+	}
+
+	listMembersRR := httptest.NewRecorder()
+	mux.ServeHTTP(listMembersRR, httptest.NewRequest("GET", "/v1/pulse/circles/"+circle.ID+"/members", nil))
+	if listMembersRR.Code != http.StatusOK || !strings.Contains(listMembersRR.Body.String(), "user-2") {
+		t.Fatalf("expected user-2 in the Circle's member list, got %d: %s", listMembersRR.Code, listMembersRR.Body.String())
+	}
+
+	listCirclesRR := httptest.NewRecorder()
+	mux.ServeHTTP(listCirclesRR, httptest.NewRequest("GET", "/v1/pulse/circles", nil))
+	if listCirclesRR.Code != http.StatusOK || !strings.Contains(listCirclesRR.Body.String(), "Family") {
+		t.Fatalf("expected Family in my Circles, got %d: %s", listCirclesRR.Code, listCirclesRR.Body.String())
+	}
+
+	removeRR := httptest.NewRecorder()
+	mux.ServeHTTP(removeRR, httptest.NewRequest("DELETE", "/v1/pulse/circles/"+circle.ID+"/members/user-2", nil))
+	if removeRR.Code != http.StatusNoContent {
+		t.Fatalf("expected 204 removing a Circle member, got %d: %s", removeRR.Code, removeRR.Body.String())
+	}
+}
+
 func TestAcceptHandlerForwardsARealNotFoundFromCore(t *testing.T) {
 	svc := pulseconnections.NewService(memory.New())
 	mux := http.NewServeMux()
-	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
+	pulseconnections.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newGroupsFactory("app-1"), fixedCallerWithCore(t, "caller-1"))
 
 	req := httptest.NewRequest("POST", "/v1/pulse/connections/requests/does-not-exist/accept", nil)
 	rr := httptest.NewRecorder()

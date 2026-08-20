@@ -82,11 +82,12 @@ class PulseApi {
 
   /// Today's Mood (product spec §22-27) - a single visual symbol plus
   /// an audience; the server resolves audience into who can actually
-  /// see it, so the client never computes visibility itself.
-  Future<PulseMood> setMood(String emoji, String audience, {List<String>? customUserIds}) => _client.request(
+  /// see it, so the client never computes visibility itself. circleId
+  /// is only meaningful when audience is 'selected_circles' (Phase 9).
+  Future<PulseMood> setMood(String emoji, String audience, {List<String>? customUserIds, String? circleId}) => _client.request(
         'PUT',
         '/v1/pulse/mood',
-        body: {'emoji': emoji, 'audience': audience, 'customUserIds': ?customUserIds},
+        body: {'emoji': emoji, 'audience': audience, 'customUserIds': ?customUserIds, 'circleId': ?circleId},
         decode: (json) => PulseMood.fromJson(json as Map<String, dynamic>),
       );
 
@@ -106,6 +107,41 @@ class PulseApi {
         '/v1/pulse/mood/$userId',
         decode: (json) => PulseMood.fromJson(json as Map<String, dynamic>),
       );
+
+  /// Circles (product spec §10, Phase 9) - a thin wrapper Pulse's own
+  /// pulse-connections module puts over Core's real groups capability;
+  /// creating a Circle already makes the caller its first member (Core's
+  /// own Create guarantee), so no separate "add myself" call is needed.
+  Future<PulseCircle> createCircle(String name) => _client.request(
+        'POST',
+        '/v1/pulse/circles',
+        body: {'name': name},
+        decode: (json) => PulseCircle.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<List<PulseCircle>> listCircles() => _client.request(
+        'GET',
+        '/v1/pulse/circles',
+        decode: (json) => ((json as Map<String, dynamic>)['items'] as List).map((e) => PulseCircle.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Future<List<PulseCircleMember>> listCircleMembers(String circleId) => _client.request(
+        'GET',
+        '/v1/pulse/circles/$circleId/members',
+        decode: (json) => ((json as Map<String, dynamic>)['items'] as List).map((e) => PulseCircleMember.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  /// Throws a real 403 ApiError if userId isn't already a real,
+  /// active Pulse connection (see pulseconnections.Service.AddCircleMember) -
+  /// a Circle can never reach a stranger.
+  Future<PulseCircleMember> addCircleMember(String circleId, String userId) => _client.request(
+        'POST',
+        '/v1/pulse/circles/$circleId/members',
+        body: {'userId': userId},
+        decode: (json) => PulseCircleMember.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<void> removeCircleMember(String circleId, String userId) => _client.request('DELETE', '/v1/pulse/circles/$circleId/members/$userId');
 }
 
 class PulseConnection {
@@ -135,6 +171,30 @@ class PulseInteraction {
         id: json['id'] as String,
         status: json['status'] as String,
         durationMs: json['durationMs'] as int?,
+      );
+}
+
+class PulseCircle {
+  final String id;
+  final String name;
+
+  PulseCircle({required this.id, required this.name});
+
+  factory PulseCircle.fromJson(Map<String, dynamic> json) => PulseCircle(
+        id: json['id'] as String,
+        name: json['name'] as String,
+      );
+}
+
+class PulseCircleMember {
+  final String userId;
+  final bool isManager;
+
+  PulseCircleMember({required this.userId, required this.isManager});
+
+  factory PulseCircleMember.fromJson(Map<String, dynamic> json) => PulseCircleMember(
+        userId: json['userId'] as String,
+        isManager: json['isManager'] as bool,
       );
 }
 

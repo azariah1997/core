@@ -20,12 +20,12 @@ func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const moodColumns = "user_id, emoji, audience, allowed_viewer_ids, created_at, expires_at, updated_at"
+const moodColumns = "user_id, emoji, audience, allowed_viewer_ids, circle_id, created_at, expires_at, updated_at"
 
 func scanMood(row pgx.Row) (mood.Mood, error) {
 	var m mood.Mood
 	var emoji, audience string
-	err := row.Scan(&m.UserID, &emoji, &audience, &m.AllowedViewerIDs, &m.CreatedAt, &m.ExpiresAt, &m.UpdatedAt)
+	err := row.Scan(&m.UserID, &emoji, &audience, &m.AllowedViewerIDs, &m.CircleID, &m.CreatedAt, &m.ExpiresAt, &m.UpdatedAt)
 	if err != nil {
 		return mood.Mood{}, err
 	}
@@ -46,13 +46,13 @@ func (r *Repository) Set(ctx context.Context, m mood.Mood) (mood.Mood, error) {
 		allowedViewerIDs = []string{}
 	}
 	row := r.pool.QueryRow(ctx, `
-		INSERT INTO moods (user_id, emoji, audience, allowed_viewer_ids, created_at, expires_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
+		INSERT INTO moods (user_id, emoji, audience, allowed_viewer_ids, circle_id, created_at, expires_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		ON CONFLICT (user_id) DO UPDATE SET
 			emoji = EXCLUDED.emoji, audience = EXCLUDED.audience, allowed_viewer_ids = EXCLUDED.allowed_viewer_ids,
-			created_at = EXCLUDED.created_at, expires_at = EXCLUDED.expires_at, updated_at = EXCLUDED.updated_at
+			circle_id = EXCLUDED.circle_id, created_at = EXCLUDED.created_at, expires_at = EXCLUDED.expires_at, updated_at = EXCLUDED.updated_at
 		RETURNING `+moodColumns,
-		m.UserID, string(m.Emoji), string(m.Audience), allowedViewerIDs, m.CreatedAt, m.ExpiresAt, m.UpdatedAt)
+		m.UserID, string(m.Emoji), string(m.Audience), allowedViewerIDs, m.CircleID, m.CreatedAt, m.ExpiresAt, m.UpdatedAt)
 	return scanMood(row)
 }
 

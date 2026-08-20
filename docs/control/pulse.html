@@ -199,7 +199,7 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">9 / 18</div><div class="label">Phases complete (Audit → Today's Mood)</div></div>
+    <div class="stat-pill"><div class="num">10 / 18</div><div class="label">Phases complete (Audit → Close Friends &amp; Circles)</div></div>
     <div class="stat-pill"><div class="num">5 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
@@ -631,7 +631,7 @@ PUT    /v1/pulse/preferences</pre>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Friend vs Close Friend classification, Pulse-owned, per-caller (asymmetric by design)</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>List mine, merged with classification</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Core's real errors (conflict, not-found) forwarded honestly, never hidden</li>
-      <li><div class="box"></div>Circles integration (Core groups) — deferred to Phase 9 per the roadmap</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Circles integration (Core groups) — landed in Phase 9, see below</li>
     </ul>
   </div>
 
@@ -701,21 +701,27 @@ PUT    /v1/pulse/preferences</pre>
 
   <div class="card phase-card done">
     <h3><span class="phase-num">8</span>Today's Mood <span class="badge done">Done</span></h3>
-    <p><code>PUT</code>/<code>DELETE /v1/pulse/mood</code>, <code>GET /v1/pulse/mood/me</code>, <code>GET /v1/pulse/mood/{userId}</code> - a passive, wordless emotional-state layer (spec §22-27) built entirely on capabilities Pulse already has. Today's Mood is a singleton row per user, replaced wholesale by the next Set, never a history table. Audience (<code>partner_only</code>/<code>close_friends</code>/<code>all_connections</code>/<code>custom_users</code>/<code>private</code>) is resolved once, at Set, from <code>bond</code>'s real active-partner record and <code>pulse-connections</code>' real Friend/Close-Friend classification - both real, same-process <code>*Service</code> dependencies (<code>internal/mood/pulsemodules</code>), never duplicated data and never re-derived per viewer (mirrors pulse-interactions' DeliveryMode: "decided once, never re-decided"). <code>selected_circles</code> (spec §25's sixth value) is a deliberate, documented gap needing Core's real groups capability - Phase 9 is explicitly the phase that integrates it. Responding to a Mood needed no new backend surface: spec §27 names Pulse and Knock themselves as the response, and both already work against any connected user ID. Live-validated end to end with real Keycloak users against real Postgres: partner_only correctly resolved to a real bonded partner and excluded a plain friend; close_friends correctly resolved against real classification data; custom_users correctly dropped a non-connection ID while keeping a real one; a real stranger and a real friend outside the chosen audience both got the same 404 as "no Mood exists"; expiry landed exactly on local midnight; Clear removed the real row.</p>
+    <p><code>PUT</code>/<code>DELETE /v1/pulse/mood</code>, <code>GET /v1/pulse/mood/me</code>, <code>GET /v1/pulse/mood/{userId}</code> - a passive, wordless emotional-state layer (spec §22-27) built entirely on capabilities Pulse already has. Today's Mood is a singleton row per user, replaced wholesale by the next Set, never a history table. Audience is resolved once, at Set, from <code>bond</code>'s real active-partner record and <code>pulse-connections</code>' real Friend/Close-Friend classification - both real, same-process <code>*Service</code> dependencies (<code>internal/mood/pulsemodules</code>), never duplicated data and never re-derived per viewer (mirrors pulse-interactions' DeliveryMode: "decided once, never re-decided"). Responding to a Mood needed no new backend surface: spec §27 names Pulse and Knock themselves as the response, and both already work against any connected user ID. Live-validated end to end with real Keycloak users against real Postgres: partner_only correctly resolved to a real bonded partner and excluded a plain friend; close_friends correctly resolved against real classification data; custom_users correctly dropped a non-connection ID while keeping a real one; a real stranger and a real friend outside the chosen audience both got the same 404 as "no Mood exists"; expiry landed exactly on local midnight; Clear removed the real row. <code>selected_circles</code>, the sixth audience value, landed in Phase 9 below.</p>
     <ul class="todo-list">
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mood selection from a predefined visual set, server-validated</li>
-      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Five of six audience types, resolved once at Set from real bond/classification state</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>All six audience types, resolved once at Set from real bond/classification/Circle state</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Timezone-correct expiry at local midnight, real Core users.timezone</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Expired/unauthorized Mood indistinguishable from "no Mood exists" - no audience-existence leak</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mood can be updated (CreatedAt preserved) and cleared</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Response via existing Pulse/Knock endpoints - no new backend surface</li>
-      <li><div class="box"></div><code>selected_circles</code> audience - deferred to Phase 9's Core groups integration</li>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">9</span>Close Friends &amp; Circles <span class="badge pending">Pending</span></h3>
-    <p>Core groups/relationship integration for Mood audience and interaction permissions.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">9</span>Close Friends &amp; Circles <span class="badge done">Done</span></h3>
+    <p><code>POST/GET /v1/pulse/circles</code>, <code>GET/POST /v1/pulse/circles/{id}/members</code>, <code>DELETE /v1/pulse/circles/{id}/members/{userId}</code> - Circles (spec §10) as a thin wrapper inside <code>pulse-connections</code> over Core's real <code>groups</code> capability (<code>backend/core-api/internal/groups</code>), never a Pulse-owned Circle table. Core's own <code>ListMine</code> has no <code>appId</code> filter (it returns every group the caller belongs to across every application), so the real adapter filters to Pulse's own AppID client-side. Adding a member requires the caller and the target to already be a real, active Pulse connection (Friend or Bond) - Pulse's own <code>checkConnected</code>, layered on top of Core's own manager-based authorization on <code>groups.AddMember</code>; a Circle can never become a way to reach a stranger. Creating a Circle needs no separate "add myself" call: Core's real Create already seeds the creator as a manager member in the same transaction. This unblocked Mood's sixth and final audience value, <code>selected_circles</code>, resolved from a real Circle's real membership the same "decided once, at Set" way every other Mood audience value works - referencing a Circle the caller isn't a member of fails honestly rather than silently resolving to an empty audience, since Core's own membership check already enforces it. Live-validated end to end with real Keycloak users against real Postgres and Core's real <code>groups</code> table: creating a Circle, correct appId filtering on list, a real active connection successfully added as a member, a real 403 rejecting a non-connection, member removal, and a <code>selected_circles</code> Mood correctly visible to a real Circle member while a real connection who wasn't in that Circle got the same 404 as everyone else outside the audience. Mobile's People tab is real: create Circles, expand one to see/add/remove members from existing connections, and pick a Circle as a Mood's audience.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Circles built on Core's real groups capability, never a parallel Pulse table</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>appId filtering applied client-side, since Core's own ListMine spans every application</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Circle membership gated on a real, active Pulse connection - never a stranger</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mood's selected_circles audience resolved against real Circle membership</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mobile People tab: create/view Circles, add/remove real connections as members</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">

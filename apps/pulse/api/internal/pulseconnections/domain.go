@@ -25,6 +25,13 @@ import (
 // graph.
 const RelationshipType = "pulse_friend"
 
+// bondRelationshipType mirrors bond.RelationshipType - duplicated
+// rather than imported (this codebase's consumer-defined-interface
+// convention), needed only so checkConnected below can recognize a
+// Bond as a valid connection too, the same two-type check
+// pulse-interactions' own checkConnected already makes.
+const bondRelationshipType = "pulse_bond"
+
 type Classification string
 
 const (
@@ -74,6 +81,13 @@ func (e *ValidationError) Error() string { return e.Message }
 var (
 	ErrNotFound  = errors.New("connection not found")
 	ErrForbidden = errors.New("not permitted to perform this action on this connection")
+	// ErrNotConnected gates Circle membership (product spec §10-11: a
+	// Circle should only ever contain people you're actually connected
+	// to - "users must mutually connect before direct interactions are
+	// possible," and Circles exist to control those interactions'
+	// audience/permissions). Mirrors pulse-interactions' own
+	// ErrNotConnected meaning.
+	ErrNotConnected = errors.New("no active connection exists between these users")
 )
 
 // CoreRelationships is the subset of Core's real relationships API this
@@ -88,6 +102,57 @@ type CoreRelationships interface {
 	Decline(ctx context.Context, relationshipID string) (RelationshipRef, error)
 	Remove(ctx context.Context, relationshipID string) error
 	ListMine(ctx context.Context, relType string) ([]RelationshipRef, error)
+}
+
+// Circle is Pulse's view of a Core Group (product spec §10: "Closest
+// Friends, Family, University, Work Friends, Gaming Friends, Custom") -
+// Circles are never a Pulse-owned table; Core's real `groups` capability
+// (backend/core-api/internal/groups) already owns exactly this shape,
+// so Pulse only ever wraps it (see CoreGroups), scoped to Pulse's own
+// AppID.
+type Circle struct {
+	ID        string
+	Name      string
+	Status    string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// CircleMember mirrors Core's GroupMember, narrowed to what Pulse
+// needs.
+type CircleMember struct {
+	UserID    string
+	Role      string
+	IsManager bool
+	CreatedAt time.Time
+}
+
+// CoreGroups is the subset of Core's real groups API Circles needs,
+// scoped to a single already-authenticated caller (same per-caller
+// pattern as CoreRelationships) - see internal/pulseconnections/core
+// for the real coresdk-backed implementation.
+type CoreGroups interface {
+	Create(ctx context.Context, name string) (Circle, error)
+	// ListMine returns every Circle the caller belongs to, already
+	// filtered to Pulse's own AppID - Core's real ListMine has no
+	// appId parameter (it returns every group the caller is in, across
+	// every application), so that filtering happens in the adapter,
+	// never here.
+	ListMine(ctx context.Context) ([]Circle, error)
+	ListMembers(ctx context.Context, circleID string) ([]CircleMember, error)
+	AddMember(ctx context.Context, circleID, userID string) (CircleMember, error)
+	RemoveMember(ctx context.Context, circleID, userID string) error
+}
+
+type CreateCircleInput struct {
+	Name string
+}
+
+func (in CreateCircleInput) Validate() error {
+	if strings.TrimSpace(in.Name) == "" {
+		return &ValidationError{Message: "name is required"}
+	}
+	return nil
 }
 
 // ClassificationRepository is the Pulse-owned storage boundary for the

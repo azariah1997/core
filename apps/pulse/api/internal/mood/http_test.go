@@ -21,17 +21,32 @@ import (
 )
 
 // fakeRelationshipsServer stands in for core-api's real /v1/relationships
-// route - the one Core call mood's own Set indirectly makes, through
-// pulse-connections' real *Service and adapter, exactly as production
-// wires it (see internal/api/router.go's newMoodConnections).
+// and /v1/groups routes - the Core calls mood's own Set indirectly
+// makes, through pulse-connections' real *Service and adapters, exactly
+// as production wires it (see internal/api/router.go's newMoodConnections
+// and newMoodCircles). Circle membership is seeded directly (circleMembers),
+// since these tests only need to prove mood resolves against real
+// membership data, not pulse-connections' own Circle-creation flow
+// (already covered by pulseconnections' own tests).
 func fakeRelationshipsServer(t *testing.T, items []map[string]any) *httptest.Server {
+	return fakeRelationshipsServerWithCircles(t, items, nil)
+}
+
+func fakeRelationshipsServerWithCircles(t *testing.T, items []map[string]any, circleMembers map[string][]map[string]any) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/relationships", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{"items": items})
 	})
+	mux.HandleFunc("GET /v1/groups/{id}/members", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"items": circleMembers[r.PathValue("id")]})
+	})
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	return server
+}
+
+func circleMemberItem(userID string) map[string]any {
+	return map[string]any{"userId": userID, "role": "", "isManager": false, "createdAt": "2026-01-01T00:00:00.000Z"}
 }
 
 func relItem(id, requesterID, targetID, status string) map[string]any {
@@ -70,7 +85,10 @@ func newRouterFor(serverURL, callerID string, connectionsSvc *pulseconnections.S
 	newConnections := func(client *coresdk.Client) mood.Connections {
 		return pulsemodules.NewConnectionsAdapter(connectionsSvc, pulseconnectionscore.New(client, "app-1"))
 	}
-	mood.RegisterRoutes(mux, moodSvc, newConnections, fixedCaller(callerID, serverURL))
+	newCircles := func(client *coresdk.Client) mood.Circles {
+		return pulsemodules.NewCirclesAdapter(connectionsSvc, pulseconnectionscore.NewGroupsAdapter(client, "app-1"))
+	}
+	mood.RegisterRoutes(mux, moodSvc, newConnections, newCircles, fixedCaller(callerID, serverURL))
 	return mux
 }
 
@@ -178,6 +196,37 @@ func TestClearHandlerRemovesTheMoodThroughTheRealRouter(t *testing.T) {
 	mux.ServeHTTP(meRR, httptest.NewRequest("GET", "/v1/pulse/mood/me", nil))
 	if meRR.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 after Clear, got %d: %s", meRR.Code, meRR.Body.String())
+	}
+}
+
+func TestSetSelectedCirclesAudienceThroughTheRealRouterUsesRealCircleMembership(t *testing.T) {
+	server := fakeRelationshipsServerWithCircles(t, nil, map[string][]map[string]any{
+		"circle-1": {circleMemberItem("caller-1"), circleMemberItem("member-1")},
+	})
+	connectionsSvc, moodSvc := newServices()
+	ownerMux := newRouterFor(server.URL, "caller-1", connectionsSvc, moodSvc)
+	memberMux := newRouterFor(server.URL, "member-1", connectionsSvc, moodSvc)
+	outsiderMux := newRouterFor(server.URL, "outsider", connectionsSvc, moodSvc)
+
+	setRR := httptest.NewRecorder()
+	ownerMux.ServeHTTP(setRR, httptest.NewRequest("PUT", "/v1/pulse/mood", strings.NewReader(`{"emoji":"🫂","audience":"selected_circles","circleId":"circle-1"}`)))
+	if setRR.Code != http.StatusOK {
+		t.Fatalf("expected 200 on set, got %d: %s", setRR.Code, setRR.Body.String())
+	}
+	if !strings.Contains(setRR.Body.String(), `"circleId":"circle-1"`) {
+		t.Fatalf("expected circleId echoed back in the owner's own response, got %s", setRR.Body.String())
+	}
+
+	memberRR := httptest.NewRecorder()
+	memberMux.ServeHTTP(memberRR, httptest.NewRequest("GET", "/v1/pulse/mood/caller-1", nil))
+	if memberRR.Code != http.StatusOK {
+		t.Fatalf("expected a real Circle member to see the Mood, got %d: %s", memberRR.Code, memberRR.Body.String())
+	}
+
+	outsiderRR := httptest.NewRecorder()
+	outsiderMux.ServeHTTP(outsiderRR, httptest.NewRequest("GET", "/v1/pulse/mood/caller-1", nil))
+	if outsiderRR.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for someone outside the Circle, got %d: %s", outsiderRR.Code, outsiderRR.Body.String())
 	}
 }
 

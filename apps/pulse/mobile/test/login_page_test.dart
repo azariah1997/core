@@ -17,6 +17,8 @@ http.Client _fakeBackend({bool failLogin = false}) {
   // round trip through the same fake backend the way a real server's
   // stored state would, rather than every GET returning a fixed fixture.
   String? moodEmoji;
+  final circles = <Map<String, dynamic>>[];
+  final circleMembers = <String, List<String>>{};
   return MockClient((req) async {
     if (req.url.path.contains('/protocol/openid-connect/token')) {
       if (failLogin) {
@@ -117,6 +119,32 @@ http.Client _fakeBackend({bool failLogin = false}) {
       return http.Response(
         jsonEncode({'userId': 'user-2friend', 'emoji': '🔥', 'createdAt': '2026-01-01T00:00:00.000Z', 'expiresAt': '2026-01-02T00:00:00.000Z'}),
         200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.method == 'POST' && req.url.path == '/v1/pulse/circles') {
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      final circle = {'id': 'circle-${circles.length + 1}', 'name': body['name'], 'status': 'active', 'createdAt': '2026-01-01T00:00:00.000Z', 'updatedAt': '2026-01-01T00:00:00.000Z'};
+      circles.add(circle);
+      return http.Response(jsonEncode(circle), 201, headers: {'content-type': 'application/json'});
+    }
+    if (req.method == 'GET' && req.url.path == '/v1/pulse/circles') {
+      return http.Response(jsonEncode({'items': circles}), 200, headers: {'content-type': 'application/json'});
+    }
+    final membersMatch = RegExp(r'^/v1/pulse/circles/([^/]+)/members$').firstMatch(req.url.path);
+    if (membersMatch != null && req.method == 'GET') {
+      final ids = circleMembers[membersMatch.group(1)] ?? [];
+      final items = ids.map((id) => {'userId': id, 'role': 'member', 'isManager': false, 'createdAt': '2026-01-01T00:00:00.000Z'}).toList();
+      return http.Response(jsonEncode({'items': items}), 200, headers: {'content-type': 'application/json'});
+    }
+    if (membersMatch != null && req.method == 'POST') {
+      final circleId = membersMatch.group(1)!;
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      final userId = body['userId'] as String;
+      circleMembers.putIfAbsent(circleId, () => []).add(userId);
+      return http.Response(
+        jsonEncode({'userId': userId, 'role': 'member', 'isManager': false, 'createdAt': '2026-01-01T00:00:00.000Z'}),
+        201,
         headers: {'content-type': 'application/json'},
       );
     }
@@ -229,6 +257,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('feeling 🔥'), findsOneWidget);
+  });
+
+  testWidgets('creating a Circle and adding a real connection as a member round-trips through the real pulse-api chain', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('People'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('newCircleNameField')), 'Family');
+    await tester.tap(find.byKey(const Key('createCircleButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Family'), findsOneWidget);
+
+    await tester.tap(find.text('Family'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('addCircleMemberDropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('user-2fr').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('addCircleMemberButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('user-2fr'), findsOneWidget);
   });
 
   testWidgets('the Profile tab round-trips through the real pulse-api chain', (tester) async {
