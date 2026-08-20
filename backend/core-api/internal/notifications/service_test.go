@@ -36,14 +36,22 @@ func newService(senders map[notifications.Channel]notifications.ChannelSender, a
 	return notifications.NewService(memory.New(), senders, fakeAdmin{admins: admins}, logger)
 }
 
-func TestSendRejectsNotifyingSomeoneElseWithoutAdmin(t *testing.T) {
-	svc := newService(nil, nil)
-	_, _, err := svc.Send(context.Background(), "u1", notifications.SendInput{
+func TestSendAllowsNotifyingSomeoneElseAndAttributesTheRealSender(t *testing.T) {
+	svc := newService(map[notifications.Channel]notifications.ChannelSender{
+		notifications.ChannelInApp: &recordingSender{},
+	}, nil)
+	n, _, err := svc.Send(context.Background(), "u1", notifications.SendInput{
 		AppID: "app-1", UserID: "u2", Category: "message", Channels: []notifications.Channel{notifications.ChannelInApp},
 		Title: "Hi", Body: "there",
 	})
-	if !errors.Is(err, notifications.ErrForbidden) {
-		t.Fatalf("expected ErrForbidden, got %v", err)
+	if err != nil {
+		t.Fatalf("expected cross-user send to succeed without admin, got %v", err)
+	}
+	if n.UserID != "u2" {
+		t.Fatalf("expected the notification to belong to the recipient u2, got %v", n.UserID)
+	}
+	if n.SentByUserID != "u1" {
+		t.Fatalf("expected SentByUserID to attribute the real caller u1, got %v", n.SentByUserID)
 	}
 }
 

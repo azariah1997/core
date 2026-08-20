@@ -59,15 +59,22 @@ const (
 // 0011_notifications.sql), so it became NotificationDelivery's table
 // instead of this one's.
 type Notification struct {
-	ID        string
-	AppID     string
-	UserID    string
-	Category  string // product-defined, e.g. "message", "friend_request" - free-form
-	Title     string
-	Body      string
-	Data      map[string]any
-	Channels  []Channel
-	CreatedAt time.Time
+	ID       string
+	AppID    string
+	UserID   string
+	Category string // product-defined, e.g. "message", "friend_request" - free-form
+	Title    string
+	Body     string
+	Data     map[string]any
+	Channels []Channel
+	// SentByUserID is the caller who triggered this send - almost
+	// always different from UserID now that Send allows any
+	// authenticated caller to notify a different user (see Service.Send
+	// and this module's README for why). Kept explicit rather than left
+	// implicit, since "who actually did this" stops being derivable
+	// from UserID alone once cross-user sends are allowed.
+	SentByUserID string
+	CreatedAt    time.Time
 }
 
 // NotificationTemplate lets a caller send by TemplateKey + variables
@@ -273,7 +280,7 @@ type ListResult struct {
 // atomically with the writes that produce them, the same pattern as
 // every other domain module's Repository.
 type Repository interface {
-	CreateNotification(ctx context.Context, in SendInput, title, body string) (Notification, error)
+	CreateNotification(ctx context.Context, sentByUserID string, in SendInput, title, body string) (Notification, error)
 	GetNotification(ctx context.Context, id string) (Notification, error)
 	ListNotificationsForUser(ctx context.Context, userID string, params ListParams) (ListResult, error)
 

@@ -43,22 +43,18 @@ func NewService(repo Repository, senders map[Channel]ChannelSender, admin AdminC
 
 // Send is the platform's single notification entry point - "applications
 // should call the Core Notification Service, not FCM/APNs directly."
-// Access is self-or-platform.admin: a user can always notify themselves,
-// and only a platform.admin can trigger a notification to someone else.
-// A real "service account" concept (letting a product backend notify any
-// user without being an admin) would be the natural next step here, but
-// this platform has no caller identity distinct from "a user" yet, so
-// self-or-admin is the safe default until that exists.
+// Any authenticated caller may notify any user - relaxed from the
+// original self-or-platform.admin restriction once a real product
+// (Pulse, notifying a Pulse's receiver on the sender's behalf) needed
+// genuine cross-user delivery and turned out to be the first caller
+// this restriction had ever blocked in practice (see this module's
+// README for the full history). The receiver's own preferences and
+// QuietHours are still enforced unconditionally below, exactly as
+// before - loosening who may trigger a send never loosens what the
+// recipient actually receives. Every send is attributed to callerID via
+// SentByUserID, so cross-user sends remain fully auditable even though
+// they're no longer restricted to admins.
 func (s *Service) Send(ctx context.Context, callerID string, in SendInput) (Notification, []NotificationDelivery, error) {
-	if callerID != in.UserID {
-		isAdmin, err := s.admin.IsPlatformAdmin(ctx, callerID)
-		if err != nil {
-			return Notification{}, nil, err
-		}
-		if !isAdmin {
-			return Notification{}, nil, ErrForbidden
-		}
-	}
 	if err := in.Validate(); err != nil {
 		return Notification{}, nil, err
 	}
@@ -79,7 +75,7 @@ func (s *Service) Send(ctx context.Context, callerID string, in SendInput) (Noti
 		}
 	}
 
-	n, err := s.repo.CreateNotification(ctx, in, title, body)
+	n, err := s.repo.CreateNotification(ctx, callerID, in, title, body)
 	if err != nil {
 		return Notification{}, nil, err
 	}

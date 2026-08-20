@@ -46,21 +46,22 @@ func callerID(w http.ResponseWriter, r *http.Request) (string, bool) {
 }
 
 type notificationResponse struct {
-	ID        string         `json:"id"`
-	AppID     string         `json:"appId"`
-	UserID    string         `json:"userId"`
-	Category  string         `json:"category"`
-	Title     string         `json:"title"`
-	Body      string         `json:"body"`
-	Data      map[string]any `json:"data,omitempty"`
-	Channels  []Channel      `json:"channels"`
-	CreatedAt string         `json:"createdAt"`
+	ID           string         `json:"id"`
+	AppID        string         `json:"appId"`
+	UserID       string         `json:"userId"`
+	Category     string         `json:"category"`
+	Title        string         `json:"title"`
+	Body         string         `json:"body"`
+	Data         map[string]any `json:"data,omitempty"`
+	Channels     []Channel      `json:"channels"`
+	SentByUserID string         `json:"sentByUserId,omitempty"`
+	CreatedAt    string         `json:"createdAt"`
 }
 
 func toNotificationResponse(n Notification) notificationResponse {
 	return notificationResponse{
 		ID: n.ID, AppID: n.AppID, UserID: n.UserID, Category: n.Category,
-		Title: n.Title, Body: n.Body, Data: n.Data, Channels: n.Channels,
+		Title: n.Title, Body: n.Body, Data: n.Data, Channels: n.Channels, SentByUserID: n.SentByUserID,
 		CreatedAt: n.CreatedAt.UTC().Format(timeFormat),
 	}
 }

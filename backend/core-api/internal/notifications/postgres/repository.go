@@ -31,14 +31,14 @@ func New(pool *pgxpool.Pool) *Repository {
 	return &Repository{pool: pool}
 }
 
-const requestColumns = "id, app_id, user_id, category, title, body, data, channels, created_at"
+const requestColumns = "id, app_id, user_id, category, title, body, data, channels, sent_by_user_id, created_at"
 
 // provider_ref/error are nullable columns; COALESCE keeps
 // NotificationDelivery.ProviderRef/Error as plain (never-nil) strings
 // rather than requiring every caller to scan through a *string.
 const deliveryColumns = "id, notification_request_id, channel, status, COALESCE(provider_ref,''), COALESCE(error,''), attempts, created_at, updated_at, delivered_at"
 
-func (r *Repository) CreateNotification(ctx context.Context, in notifications.SendInput, title, body string) (notifications.Notification, error) {
+func (r *Repository) CreateNotification(ctx context.Context, sentByUserID string, in notifications.SendInput, title, body string) (notifications.Notification, error) {
 	data, err := marshalJSON(in.Data)
 	if err != nil {
 		return notifications.Notification{}, err
@@ -57,10 +57,10 @@ func (r *Repository) CreateNotification(ctx context.Context, in notifications.Se
 	var n notifications.Notification
 	var channelsRaw []string
 	err = tx.QueryRow(ctx,
-		`INSERT INTO notification_requests (app_id, user_id, category, title, body, data, channels)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING `+requestColumns,
-		in.AppID, in.UserID, in.Category, title, body, data, channels,
-	).Scan(&n.ID, &n.AppID, &n.UserID, &n.Category, &n.Title, &n.Body, &n.Data, &channelsRaw, &n.CreatedAt)
+		`INSERT INTO notification_requests (app_id, user_id, category, title, body, data, channels, sent_by_user_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING `+requestColumns,
+		in.AppID, in.UserID, in.Category, title, body, data, channels, sentByUserID,
+	).Scan(&n.ID, &n.AppID, &n.UserID, &n.Category, &n.Title, &n.Body, &n.Data, &channelsRaw, &n.SentByUserID, &n.CreatedAt)
 	if err != nil {
 		return notifications.Notification{}, fmt.Errorf("insert notification request: %w", err)
 	}
@@ -81,7 +81,7 @@ func (r *Repository) GetNotification(ctx context.Context, id string) (notificati
 	var n notifications.Notification
 	var channelsRaw []string
 	err := r.pool.QueryRow(ctx, `SELECT `+requestColumns+` FROM notification_requests WHERE id = $1`, id).
-		Scan(&n.ID, &n.AppID, &n.UserID, &n.Category, &n.Title, &n.Body, &n.Data, &channelsRaw, &n.CreatedAt)
+		Scan(&n.ID, &n.AppID, &n.UserID, &n.Category, &n.Title, &n.Body, &n.Data, &channelsRaw, &n.SentByUserID, &n.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return notifications.Notification{}, notifications.ErrNotFound
@@ -119,7 +119,7 @@ func (r *Repository) ListNotificationsForUser(ctx context.Context, userID string
 	for rows.Next() {
 		var n notifications.Notification
 		var channelsRaw []string
-		if err := rows.Scan(&n.ID, &n.AppID, &n.UserID, &n.Category, &n.Title, &n.Body, &n.Data, &channelsRaw, &n.CreatedAt); err != nil {
+		if err := rows.Scan(&n.ID, &n.AppID, &n.UserID, &n.Category, &n.Title, &n.Body, &n.Data, &channelsRaw, &n.SentByUserID, &n.CreatedAt); err != nil {
 			return notifications.ListResult{}, fmt.Errorf("scan notification: %w", err)
 		}
 		n.Channels = toChannels(channelsRaw)

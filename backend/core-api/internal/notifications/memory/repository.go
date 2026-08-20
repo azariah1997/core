@@ -38,12 +38,12 @@ func preferenceKey(userID, appID, category string, channel notifications.Channel
 	return userID + "|" + appID + "|" + category + "|" + string(channel)
 }
 
-func (r *Repository) CreateNotification(ctx context.Context, in notifications.SendInput, title, body string) (notifications.Notification, error) {
+func (r *Repository) CreateNotification(ctx context.Context, sentByUserID string, in notifications.SendInput, title, body string) (notifications.Notification, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	n := notifications.Notification{
 		ID: uuid.NewString(), AppID: in.AppID, UserID: in.UserID, Category: in.Category,
-		Title: title, Body: body, Data: in.Data, Channels: in.Channels, CreatedAt: time.Now().UTC(),
+		Title: title, Body: body, Data: in.Data, Channels: in.Channels, SentByUserID: sentByUserID, CreatedAt: time.Now().UTC(),
 	}
 	r.requests[n.ID] = n
 	return n, nil

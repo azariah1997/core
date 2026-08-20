@@ -49,7 +49,7 @@ func TestSendNotificationEndToEnd(t *testing.T) {
 	}
 }
 
-func TestSendToSomeoneElseWithoutAdminEndToEnd(t *testing.T) {
+func TestSendToSomeoneElseEndToEnd(t *testing.T) {
 	svc := newService(map[notifications.Channel]notifications.ChannelSender{
 		notifications.ChannelInApp: &recordingSender{},
 	}, nil)
@@ -60,8 +60,11 @@ func TestSendToSomeoneElseWithoutAdminEndToEnd(t *testing.T) {
 		strings.NewReader(`{"appId":"app-1","userId":"u2","category":"message","channels":["in_app"],"title":"Hi","body":"there"}`))
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, req)
-	if rr.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201 - cross-user send no longer requires admin, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), `"sentByUserId":"u1"`) {
+		t.Fatalf("expected the real caller attributed via sentByUserId, got %s", rr.Body.String())
 	}
 }
 
