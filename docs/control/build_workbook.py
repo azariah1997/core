@@ -79,7 +79,7 @@ ws.merge_cells("A2:F2")
 ws.row_dimensions[2].height = 32
 
 stats = [
-    ("Phases complete", "29 / 30", "97%"),
+    ("Phases complete", "30 / 30", "100%"),
     ("Backend services", "3", "core-api, realtime-gateway, worker"),
     ("Frontend apps", "1", "apps/admin (Next.js 15 App Router) - now includes /control-plane, Phase 29"),
     ("Developer portal", "1", "platform/backstage (real @backstage/create-app, 27-entity catalog)"),
@@ -89,7 +89,7 @@ stats = [
     ("Live HTTP endpoints", "147", "see 'API Endpoints' sheet"),
     ("DB migrations", "22", "data/migrations/0001-0022"),
     ("Real infra dependencies", "10", "Postgres, Valkey, Keycloak, OpenFGA, MinIO, OpenSearch, Temporal, Kafka/Redpanda, Ollama, OTel/Prometheus/Grafana/Loki/Tempo"),
-    ("Commits so far", "42", "see git log"),
+    ("Commits so far", "45", "see git log"),
 ]
 r = 4
 ws.cell(row=r, column=1, value="At a glance").font = Font(size=13, bold=True)
@@ -153,7 +153,7 @@ roadmap_rows = [
     (27, "Done", "SDKs", "Go (packages/go/coresdk), TypeScript (packages/typescript/core-sdk), and Dart (packages/flutter/core_sdk) - auth/token refresh, typed API calls, errors, pagination, GET-only retries, a real realtime WebSocket client, device registration, in all three. Each proven by a real consumer: apps/admin migrated its entire API layer to the TS SDK; apps/mobile's login/profile flow uses the Dart SDK (and closed a real Phase 9 gap - make flutter-test now passes). 39 unit tests total, all against real local HTTP servers, plus live validation against real Keycloak/core-api/realtime-gateway for all three.", "12b9046"),
     (28, "Done", "Observability Completion", "New packages/go/platformkit/metrics gives every service a real /metrics endpoint and all 8 named dashboards real backing data (Kafka lag excluded - no real producer/consumer exists yet, an honest placeholder panel instead). logging.NewWithLoki ships structured logs directly to Loki's push API with real trace_id correlation. Grafana provisioning (previously mounted nowhere) now auto-loads Prometheus/Tempo/Loki datasources and a real dashboard; alerts.yml adds 6 live-evaluated Prometheus alerting rules. A real regression (broken WebSocket Hijack) was caught by the metrics middleware's own tests before ever reaching a running service.", "697ea4c"),
     (29, "Done", "Platform Control Plane", "New apps/admin/control-plane page - all 12 roadmap-named dimensions, real: applications/health (existing), real per-service versions (new config.Version - the actual git SHA, wired through health.Live/Health on all 3 services), real environment (from GET /v1/platform), the real dependency graph and DB ownership (docs/control/platform.json, a new machine-readable export from build_workbook.py's own data + catalog/system.yaml), real events (contracts/asyncapi), real live Prometheus alerts, a real git log for recent changes, and an honest Deployments placeholder (no CI/CD exists yet).", "f0d1cc3"),
-    (30, "Next up", "AI Development Context", "Machine-readable context for AI agents - every module carries README, ownership metadata, dependencies, API contract, event contracts, DB ownership, so an agent (like this one) can safely work on any part of the platform.", "-"),
+    (30, "Done", "AI Development Context", "Audited and confirmed real per-module README/ownership/dependencies/API+event contracts/DB ownership already existed (Phases 26/29); closed the one genuine gap - 12 of 22 core-api modules had no handler-level (http_test.go) coverage - with real tests reading each module's actual source, never assumed. Rewrote docs/AI_CONTEXT.md and docs/architecture/overview.md from stale initial-commit stubs into a real description of the module pattern, testing convention, real-infra-only validation philosophy, and the phase loop this whole build actually followed.", "-"),
 ]
 ws2 = add_sheet(
     "Roadmap",
@@ -304,11 +304,15 @@ done(29, "Control Plane: one view - health", "Reuses the existing real getSystem
 done(29, "Control Plane: one view - alerts", "New live fetch of Prometheus's real GET /api/v1/alerts (Phase 28's rules) - cross-checked live against a direct curl to the same endpoint")
 done(29, "Control Plane: one view - recent changes", "New real `git log` of the checkout, run server-side - not a hand-maintained changelog")
 
-for n, name, items in [
-    (30, "AI Development Context", ["every module: README", "every module: ownership metadata", "every module: dependencies", "every module: API contract", "every module: event contracts", "every module: DB ownership"]),
-]:
-    for item in items:
-        pending(n, f"{name}: {item}")
+done(30, "AI Development Context: every module - README", "backend/core-api/internal/<module>/README.md - real Responsibilities/Non-responsibilities/Layout/Storage sections, the actual architecture notes (already real since early phases, confirmed this phase)")
+done(30, "AI Development Context: every module - ownership metadata", "modules/*/module.yaml (owner/lifecycle) - real since Phase 26")
+done(30, "AI Development Context: every module - dependencies", "modules/*/module.yaml + catalog/system.yaml's dependsOn graph - real since Phase 26")
+done(30, "AI Development Context: every module - API contract", "contracts/openapi/core-api.yaml, module-prefixed operationIds - real since Phase 26")
+done(30, "AI Development Context: every module - event contracts", "contracts/asyncapi/events.yaml, cross-checked against real outbox.Record call sites - real since Phase 26")
+done(30, "AI Development Context: every module - DB ownership", "docs/control/platform.json's Modules export - real since Phase 29")
+done(30, "AI Development Context: every module - tests", "Service-layer tests were already real everywhere; closed the real gap this phase found - 12 of 22 core-api modules (aigateway, analytics, audit, authz, billing, features, jobs, privacy, remoteconfig, search, trustsafety, workflows) had no http_test.go handler-layer coverage. All 12 now have 3-5 tests each against the real router, reading actual source rather than assumed shapes.")
+done(30, "AI Development Context: docs/AI_CONTEXT.md reflects real architecture rules", "Rewritten from a 26-line initial-commit stub into a real description of the layered module pattern, consumer-defined interfaces, two-phase wiring, the testing convention, real-infra-only validation, the catalog/SDK/observability stack, and the Inspect-Design-Implement-Test-Validate-Document-Commit phase loop this whole build followed")
+done(30, "AI Development Context: docs/architecture/overview.md kept current", "Diagram and principles updated to include Keycloak/OpenFGA, the 3 SDKs, Backstage, the observability stack, and the Admin Portal - all previously entirely absent from the diagram")
 
 ws3 = add_sheet(
     "Todo Checklist",
