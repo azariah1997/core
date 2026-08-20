@@ -199,11 +199,11 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">1 / 18</div><div class="label">Phases complete (Architecture Audit)</div></div>
-    <div class="stat-pill"><div class="num">10</div><div class="label">Pulse domain modules planned</div></div>
+    <div class="stat-pill"><div class="num">2 / 18</div><div class="label">Phases complete (Audit + Product Foundation)</div></div>
+    <div class="stat-pill"><div class="num">1 / 10</div><div class="label">Pulse domain modules live (pulse-profile)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
-    <div class="stat-pill"><div class="num">0</div><div class="label">Feature code lines shipped (by design — see §106)</div></div>
-    <div class="stat-pill"><div class="num">Flutter</div><div class="label">Mobile — apps/pulse/mobile</div></div>
+    <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
+    <div class="stat-pill"><div class="num">Flutter</div><div class="label">Mobile — apps/pulse/mobile, live end to end</div></div>
   </div>
 </header>
 
@@ -451,11 +451,11 @@ Core Platform</pre>
   <p class="hint">Full detail in <code>apps/pulse/docs/ARCHITECTURE_AUDIT.md</code>. Every row below was verified against real Core Platform source in this repository — nothing here was assumed from a module name.</p>
 
   <div class="card">
-    <h3>Pulse-owned domain modules (new — none implemented yet)</h3>
+    <h3>Pulse-owned domain modules (1 of 10 live)</h3>
     <table>
       <thead><tr><th>Module</th><th>Owns</th><th>Depends on</th><th>Phase</th></tr></thead>
       <tbody>
-        <tr><td><code>pulse-profile</code></td><td>Pulse-specific user extension</td><td>Core <code>users</code></td><td>1</td></tr>
+        <tr><td><code>pulse-profile</code> <span class="badge done">Done</span></td><td>Pulse-specific user extension</td><td>Core <code>users</code></td><td>1</td></tr>
         <tr><td><code>pulse-connections</code></td><td>Friend / Close-Friend classification &amp; permissions</td><td>Core <code>relationships</code>, <code>groups</code></td><td>2</td></tr>
         <tr><td><code>bond</code></td><td>One-active-Bond invariant, Bond lifecycle</td><td>Core <code>relationships</code>, pulse-connections</td><td>3</td></tr>
         <tr><td><code>pulse-interactions</code></td><td>Pulse/Knock/MoodResponse state machine</td><td>relationships, notifications, devices, bond</td><td>4-7</td></tr>
@@ -608,17 +608,17 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">1</span>Product Foundation <span class="badge pending">Pending</span></h3>
-    <p>Register Pulse as a Core Application, scaffold apps/pulse/api (Go, platformkit-based), scaffold apps/pulse/mobile (Flutter, five-tab shell), stand up pulse-profile end-to-end as the first proof the whole chain works.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">1</span>Product Foundation <span class="badge done">Done</span></h3>
+    <p>Pulse registered as a real Core Application (real AppID, not a placeholder), apps/pulse/api and apps/pulse/mobile both scaffolded and running, pulse-profile live end-to-end (mobile → Pulse API → Core API → Pulse's own Postgres), feature-flag namespace registered in Core. Live-validated with real curl and a real running Flutter web build against real infrastructure — see this phase's entry in the repo's git history for the full validation trail.</p>
     <ul class="todo-list">
-      <li><div class="box"></div>Pulse application registration (real POST /v1/apps call)</li>
-      <li><div class="box"></div>apps/pulse/api Go service scaffold (own Postgres/migrations)</li>
-      <li><div class="box"></div>pulse-profile module (domain/service/http/postgres/memory + tests)</li>
-      <li><div class="box"></div>apps/pulse/mobile Flutter scaffold + navigation shell (Home/People/Mood/Moments/Profile)</li>
-      <li><div class="box"></div>Core SDK integration (core_sdk path dependency)</li>
-      <li><div class="box"></div>Feature-flag namespace registered (pulse, pulse_back, knock, mood, live_touch, custom_signals, moments, scheduled_pulse, wearables)</li>
-      <li><div class="box"></div>Analytics namespace registered</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Pulse application registration (real POST /v1/apps call)</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>apps/pulse/api Go service scaffold (own Postgres database + migration, live health/metrics)</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>pulse-profile module (domain/service/http/postgres/memory + 11 passing tests)</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>apps/pulse/mobile Flutter scaffold + navigation shell (Home/People/Mood/Moments/Profile), 4 passing widget tests</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Core SDK integration — real Keycloak login + a thin PulseApi client built on core_sdk's CoreClient</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Feature-flag namespace registered (pulse, pulse_back, knock, mood, live_touch, custom_signals, moments, scheduled_pulse, wearables) — all 9 live in Core, scoped to Pulse's real AppID</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Analytics event names documented (§79) — actual emission starts with real interactions in Phase 4, since pulse-profile has none of the named events itself</li>
     </ul>
   </div>
 

@@ -31,4 +31,4 @@ apps/pulse/
 
 ## Status
 
-Architecture audit complete (this commit). No feature code has been written yet - see `docs/ARCHITECTURE_AUDIT.md`'s "First code change recommended" section and the roadmap dashboard for what Phase 1 actually is. Per the product spec's own instruction, implementation proceeds in vertical, independently-validated slices, never as one large change.
+Phase 1 (Product Foundation) complete and live-validated: Pulse is registered as a real Core `Application`, `apps/pulse/api` and `apps/pulse/mobile` both exist and run, the `pulse-profile` module works end to end (mobile → Pulse API → Core API → Pulse's own Postgres), and Pulse's feature-flag namespace (`pulse`, `pulse_back`, `knock`, `mood`, `live_touch`, `custom_signals`, `moments`, `scheduled_pulse`, `wearables`) is registered in Core. See `docs/ARCHITECTURE_AUDIT.md` for the full design and the root `docs/control/pulse.html` for live roadmap/todo status. Per the product spec's own instruction, implementation proceeds in vertical, independently-validated slices - Phase 2 (Connection Experience) is next.

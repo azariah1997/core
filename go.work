@@ -6,4 +6,5 @@ use (
 	./backend/worker
 	./packages/go/platformkit
 	./packages/go/coresdk
+	./apps/pulse/api
 )
