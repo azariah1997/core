@@ -1,6 +1,6 @@
 name: bond
 owner: pulse
-lifecycle: planned
+lifecycle: experimental
 dependencies:
   - core:relationships
   - pulse-connections

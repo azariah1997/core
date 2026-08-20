@@ -199,8 +199,8 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">3 / 18</div><div class="label">Phases complete (Audit, Foundation, Connections)</div></div>
-    <div class="stat-pill"><div class="num">2 / 10</div><div class="label">Pulse domain modules live</div></div>
+    <div class="stat-pill"><div class="num">4 / 18</div><div class="label">Phases complete (Audit, Foundation, Connections, Bond)</div></div>
+    <div class="stat-pill"><div class="num">3 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
     <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
     <div class="stat-pill"><div class="num">Flutter</div><div class="label">Mobile — apps/pulse/mobile, live end to end</div></div>
@@ -457,7 +457,7 @@ Core Platform</pre>
       <tbody>
         <tr><td><code>pulse-profile</code> <span class="badge done">Done</span></td><td>Pulse-specific user extension</td><td>Core <code>users</code></td><td>1</td></tr>
         <tr><td><code>pulse-connections</code> <span class="badge done">Done</span></td><td>Friend / Close-Friend classification &amp; permissions</td><td>Core <code>relationships</code>, <code>groups</code></td><td>2</td></tr>
-        <tr><td><code>bond</code></td><td>One-active-Bond invariant, Bond lifecycle</td><td>Core <code>relationships</code>, pulse-connections</td><td>3</td></tr>
+        <tr><td><code>bond</code> <span class="badge done">Done</span></td><td>One-active-Bond invariant, Bond lifecycle</td><td>Core <code>relationships</code>, pulse-connections</td><td>3</td></tr>
         <tr><td><code>pulse-interactions</code></td><td>Pulse/Knock/MoodResponse state machine</td><td>relationships, notifications, devices, bond</td><td>4-7</td></tr>
         <tr><td><code>mood</code></td><td>Today's Mood, audience, expiry</td><td>pulse-connections, groups</td><td>8</td></tr>
         <tr><td><code>live-touch</code></td><td>Synchronous touch session lifecycle</td><td>bond, pulse-connections, pulse-interactions</td><td>10</td></tr>
@@ -634,9 +634,16 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">3</span>Partner Bond <span class="badge pending">Pending</span></h3>
-    <p>Bond request/accept, one-active-Bond policy (Postgres partial unique index, not just app-level check), ending, Bond-specific permissions. Tests must cover concurrent Bond requests.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">3</span>Partner Bond <span class="badge done">Done</span></h3>
+    <p>Bond request/accept (requires an existing active Friend connection first, per spec §11) over a real Core relationship (type <code>pulse_bond</code>). The one-active-bond invariant is enforced by a dedicated <code>bond_active_holders</code> table with <code>user_id</code> as its PRIMARY KEY - one row per user, ever - never an application-level check. 15 passing tests (service + handler layers). <b>Real concurrency proven, not just asserted:</b> a throwaway program fired two goroutines racing <code>Accept</code> for the same target user against real Postgres; exactly one succeeded across 4 separate runs, the other receiving a real <code>ErrAlreadyBonded</code> from a genuine unique-constraint violation.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond request - requires an existing active connection (spec §11), rejects otherwise</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond acceptance - only the target may accept, mirroring Core's own relationships semantics</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>One-active-Bond policy - real Postgres unique-constraint enforcement, live-proven under genuine concurrency</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond ending - frees the active-holder slot for a new bond</li>
+      <li><div class="box"></div>Bond-specific permissions (Live Touch, private touch language gating) - wired starting Phase 10/11, once those features exist</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">
