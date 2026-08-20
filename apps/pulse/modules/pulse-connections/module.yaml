@@ -1,6 +1,6 @@
 name: pulse-connections
 owner: pulse
-lifecycle: planned
+lifecycle: experimental
 dependencies:
   - core:relationships
   - core:groups

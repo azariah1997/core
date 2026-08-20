@@ -8,7 +8,10 @@ import (
 	"net/http"
 
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseauth"
+	"github.com/example/core-platform/apps/pulse/api/internal/pulseconnections"
+	pulseconnectionscore "github.com/example/core-platform/apps/pulse/api/internal/pulseconnections/core"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseprofile"
+	"github.com/example/core-platform/packages/go/coresdk"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
 	"github.com/example/core-platform/packages/go/platformkit/metrics"
@@ -20,9 +23,13 @@ const serviceName = "pulse-api"
 type Config struct {
 	Version    string
 	CoreAPIURL string
+	// PulseAppID is Pulse's own real Core Application ID (registered
+	// once via POST /v1/apps during Phase 1) - every Core relationships
+	// call pulse-connections makes needs it.
+	PulseAppID string
 }
 
-func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service) http.Handler {
+func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, connectionsSvc *pulseconnections.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	checks := func(ctx context.Context) []health.Result {
@@ -36,6 +43,11 @@ func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service) http.
 
 	requireUser := pulseauth.RequireUser(cfg.CoreAPIURL)
 	pulseprofile.RegisterRoutes(mux, profileSvc, requireUser)
+
+	newCore := func(client *coresdk.Client) pulseconnections.CoreRelationships {
+		return pulseconnectionscore.New(client, cfg.PulseAppID)
+	}
+	pulseconnections.RegisterRoutes(mux, connectionsSvc, newCore, requireUser)
 
 	return metrics.Middleware(serviceName, mux, corsMiddleware(correlation.Middleware(mux)))
 }

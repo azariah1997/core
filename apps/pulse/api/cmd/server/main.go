@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/example/core-platform/apps/pulse/api/internal/api"
+	"github.com/example/core-platform/apps/pulse/api/internal/pulseconnections"
+	pulseconnectionspg "github.com/example/core-platform/apps/pulse/api/internal/pulseconnections/postgres"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseprofile"
 	pulseprofilepg "github.com/example/core-platform/apps/pulse/api/internal/pulseprofile/postgres"
 	"github.com/example/core-platform/packages/go/platformkit/config"
@@ -52,12 +54,18 @@ func main() {
 	defer pg.ReportStats(ctx, serviceName, pool, 10*time.Second)()
 
 	profileSvc := pulseprofile.NewService(pulseprofilepg.New(pool))
+	connectionsSvc := pulseconnections.NewService(pulseconnectionspg.New(pool))
 
 	cfg := api.Config{
 		Version:    config.Load().Version,
 		CoreAPIURL: env("CORE_API_URL", "http://localhost:8080"),
+		PulseAppID: env("PULSE_APP_ID", ""),
 	}
-	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc))
+	if cfg.PulseAppID == "" {
+		logger.Error("PULSE_APP_ID is required - register Pulse via POST /v1/apps first (see apps/pulse/api/README.md)")
+		os.Exit(1)
+	}
+	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc))
 
 	addr := env("PULSE_HTTP_ADDR", ":8096")
 	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}

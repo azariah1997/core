@@ -17,21 +17,42 @@ import (
 	"github.com/example/core-platform/packages/go/platformkit/apperr"
 )
 
-type ctxKey struct{}
+type callerCtxKey struct{}
+type clientCtxKey struct{}
 
 func WithCaller(ctx context.Context, userID string) context.Context {
-	return context.WithValue(ctx, ctxKey{}, userID)
+	return context.WithValue(ctx, callerCtxKey{}, userID)
 }
 
 func FromContext(ctx context.Context) (string, bool) {
-	id, ok := ctx.Value(ctxKey{}).(string)
+	id, ok := ctx.Value(callerCtxKey{}).(string)
 	return id, ok
+}
+
+// WithClient attaches an authenticated *coresdk.Client to ctx, so any
+// module needing to act against Core on that same caller's behalf (e.g.
+// pulse-connections calling Core's relationships API) reuses it instead
+// of re-parsing the bearer token and building a second client.
+// RequireUser calls this itself in production; exported so handler
+// tests can inject a client pointed at a real local httptest.Server
+// standing in for core-api, the same real-local-server testing
+// convention this whole platform's SDKs use.
+func WithClient(ctx context.Context, client *coresdk.Client) context.Context {
+	return context.WithValue(ctx, clientCtxKey{}, client)
+}
+
+// ClientFromContext returns the per-request Core client authenticated
+// as the current caller - never a fixed service-level credential.
+func ClientFromContext(ctx context.Context) (*coresdk.Client, bool) {
+	c, ok := ctx.Value(clientCtxKey{}).(*coresdk.Client)
+	return c, ok
 }
 
 // RequireUser returns middleware that resolves the caller's real Core
 // User ID from the request's own Authorization header and attaches it
-// to the request context. coreAPIURL is Pulse's only network dependency
-// for authentication - never Keycloak directly.
+// (plus the authenticated client that resolved it) to the request
+// context. coreAPIURL is Pulse's only network dependency for
+// authentication - never Keycloak directly.
 func RequireUser(coreAPIURL string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -46,7 +67,9 @@ func RequireUser(coreAPIURL string) func(http.Handler) http.Handler {
 				apperr.Write(w, r, apperr.New(apperr.CodeUnauthenticated, "could not resolve caller against core-api"))
 				return
 			}
-			next.ServeHTTP(w, r.WithContext(WithCaller(r.Context(), user.ID)))
+			ctx := WithCaller(r.Context(), user.ID)
+			ctx = WithClient(ctx, client)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
