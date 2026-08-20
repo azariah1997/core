@@ -13,6 +13,10 @@ import 'package:pulse/main.dart';
 /// core-api's routes (login, identity) and pulse-api's (profile), since
 /// LoginPage forwards the same MockClient to both real API clients.
 http.Client _fakeBackend({bool failLogin = false}) {
+  // Mutable across requests within one test - lets a set/clear Mood
+  // round trip through the same fake backend the way a real server's
+  // stored state would, rather than every GET returning a fixed fixture.
+  String? moodEmoji;
   return MockClient((req) async {
     if (req.url.path.contains('/protocol/openid-connect/token')) {
       if (failLogin) {
@@ -83,6 +87,36 @@ http.Client _fakeBackend({bool failLogin = false}) {
       return http.Response(
         jsonEncode({'id': 'knock-1', 'type': 'knock', 'otherUserId': 'user-2friend', 'role': 'sender', 'status': 'completed', 'deliveryMode': 'live', 'pattern': 'double_tap', 'createdAt': '2026-01-01T00:00:00.000Z'}),
         201,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.method == 'PUT' && req.url.path == '/v1/pulse/mood') {
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      moodEmoji = body['emoji'] as String;
+      return http.Response(
+        jsonEncode({'userId': 'user-1', 'emoji': moodEmoji, 'audience': body['audience'], 'createdAt': '2026-01-01T00:00:00.000Z', 'expiresAt': '2026-01-02T00:00:00.000Z', 'updatedAt': '2026-01-01T00:00:00.000Z'}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.method == 'DELETE' && req.url.path == '/v1/pulse/mood') {
+      moodEmoji = null;
+      return http.Response('', 204);
+    }
+    if (req.url.path == '/v1/pulse/mood/me') {
+      if (moodEmoji == null) {
+        return http.Response(jsonEncode({'code': 'NOT_FOUND', 'message': 'mood not found'}), 404, headers: {'content-type': 'application/json'});
+      }
+      return http.Response(
+        jsonEncode({'userId': 'user-1', 'emoji': moodEmoji, 'createdAt': '2026-01-01T00:00:00.000Z', 'expiresAt': '2026-01-02T00:00:00.000Z'}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.url.path == '/v1/pulse/mood/user-2friend') {
+      return http.Response(
+        jsonEncode({'userId': 'user-2friend', 'emoji': '🔥', 'createdAt': '2026-01-01T00:00:00.000Z', 'expiresAt': '2026-01-02T00:00:00.000Z'}),
+        200,
         headers: {'content-type': 'application/json'},
       );
     }
@@ -164,6 +198,37 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Knock sent'), findsOneWidget);
+  });
+
+  testWidgets('setting and clearing a Mood round-trips through the real pulse-api chain', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Mood'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('🔥').first);
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('setMoodButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mood set'), findsOneWidget);
+    expect(find.byKey(const Key('clearMoodButton')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('clearMoodButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mood cleared'), findsOneWidget);
+    expect(find.byKey(const Key('clearMoodButton')), findsNothing);
+  });
+
+  testWidgets('the Home tab shows the target connection\'s visible Mood', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('feeling 🔥'), findsOneWidget);
   });
 
   testWidgets('the Profile tab round-trips through the real pulse-api chain', (tester) async {

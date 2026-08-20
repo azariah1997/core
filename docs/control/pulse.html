@@ -199,8 +199,8 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">8 / 18</div><div class="label">Phases complete (Audit → Knock)</div></div>
-    <div class="stat-pill"><div class="num">4 / 10</div><div class="label">Pulse domain modules live</div></div>
+    <div class="stat-pill"><div class="num">9 / 18</div><div class="label">Phases complete (Audit → Today's Mood)</div></div>
+    <div class="stat-pill"><div class="num">5 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
     <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
@@ -452,7 +452,7 @@ Core Platform</pre>
   <p class="hint">Full detail in <code>apps/pulse/docs/ARCHITECTURE_AUDIT.md</code>. Every row below was verified against real Core Platform source in this repository — nothing here was assumed from a module name.</p>
 
   <div class="card">
-    <h3>Pulse-owned domain modules (1 of 10 live)</h3>
+    <h3>Pulse-owned domain modules (5 of 10 live)</h3>
     <table>
       <thead><tr><th>Module</th><th>Owns</th><th>Depends on</th><th>Phase</th></tr></thead>
       <tbody>
@@ -460,7 +460,7 @@ Core Platform</pre>
         <tr><td><code>pulse-connections</code> <span class="badge done">Done</span></td><td>Friend / Close-Friend classification &amp; permissions</td><td>Core <code>relationships</code>, <code>groups</code></td><td>2</td></tr>
         <tr><td><code>bond</code> <span class="badge done">Done</span></td><td>One-active-Bond invariant, Bond lifecycle</td><td>Core <code>relationships</code>, pulse-connections</td><td>3</td></tr>
         <tr><td><code>pulse-interactions</code> <span class="badge done">Done (live path)</span></td><td>Pulse/Knock/MoodResponse state machine</td><td>relationships, rtbus, analytics, ratelimit</td><td>4-7</td></tr>
-        <tr><td><code>mood</code></td><td>Today's Mood, audience, expiry</td><td>pulse-connections, groups</td><td>8</td></tr>
+        <tr><td><code>mood</code> <span class="badge done">Done</span></td><td>Today's Mood, audience, expiry</td><td>pulse-connections, bond</td><td>8</td></tr>
         <tr><td><code>live-touch</code></td><td>Synchronous touch session lifecycle</td><td>bond, pulse-connections, pulse-interactions</td><td>10</td></tr>
         <tr><td><code>signals</code></td><td>Custom touch-pattern storage</td><td>pulse-connections, bond</td><td>11</td></tr>
         <tr><td><code>moments</code></td><td>Saved-highlights timeline (references only, no chat)</td><td>pulse-interactions</td><td>12</td></tr>
@@ -699,9 +699,18 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">8</span>Today's Mood <span class="badge pending">Pending</span></h3>
-    <p>Mood selection, audience, expiry, display, non-verbal response via Pulse/Knock. Wordless-first.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">8</span>Today's Mood <span class="badge done">Done</span></h3>
+    <p><code>PUT</code>/<code>DELETE /v1/pulse/mood</code>, <code>GET /v1/pulse/mood/me</code>, <code>GET /v1/pulse/mood/{userId}</code> - a passive, wordless emotional-state layer (spec §22-27) built entirely on capabilities Pulse already has. Today's Mood is a singleton row per user, replaced wholesale by the next Set, never a history table. Audience (<code>partner_only</code>/<code>close_friends</code>/<code>all_connections</code>/<code>custom_users</code>/<code>private</code>) is resolved once, at Set, from <code>bond</code>'s real active-partner record and <code>pulse-connections</code>' real Friend/Close-Friend classification - both real, same-process <code>*Service</code> dependencies (<code>internal/mood/pulsemodules</code>), never duplicated data and never re-derived per viewer (mirrors pulse-interactions' DeliveryMode: "decided once, never re-decided"). <code>selected_circles</code> (spec §25's sixth value) is a deliberate, documented gap needing Core's real groups capability - Phase 9 is explicitly the phase that integrates it. Responding to a Mood needed no new backend surface: spec §27 names Pulse and Knock themselves as the response, and both already work against any connected user ID. Live-validated end to end with real Keycloak users against real Postgres: partner_only correctly resolved to a real bonded partner and excluded a plain friend; close_friends correctly resolved against real classification data; custom_users correctly dropped a non-connection ID while keeping a real one; a real stranger and a real friend outside the chosen audience both got the same 404 as "no Mood exists"; expiry landed exactly on local midnight; Clear removed the real row.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mood selection from a predefined visual set, server-validated</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Five of six audience types, resolved once at Set from real bond/classification state</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Timezone-correct expiry at local midnight, real Core users.timezone</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Expired/unauthorized Mood indistinguishable from "no Mood exists" - no audience-existence leak</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mood can be updated (CreatedAt preserved) and cleared</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Response via existing Pulse/Knock endpoints - no new backend surface</li>
+      <li><div class="box"></div><code>selected_circles</code> audience - deferred to Phase 9's Core groups integration</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">

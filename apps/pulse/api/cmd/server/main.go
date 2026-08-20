@@ -11,6 +11,10 @@ import (
 	"github.com/example/core-platform/apps/pulse/api/internal/api"
 	"github.com/example/core-platform/apps/pulse/api/internal/bond"
 	bondpg "github.com/example/core-platform/apps/pulse/api/internal/bond/postgres"
+	"github.com/example/core-platform/apps/pulse/api/internal/mood"
+	moodcore "github.com/example/core-platform/apps/pulse/api/internal/mood/core"
+	moodpg "github.com/example/core-platform/apps/pulse/api/internal/mood/postgres"
+	"github.com/example/core-platform/apps/pulse/api/internal/mood/pulsemodules"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseconnections"
 	pulseconnectionspg "github.com/example/core-platform/apps/pulse/api/internal/pulseconnections/postgres"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions"
@@ -96,7 +100,9 @@ func main() {
 	analyticsAdapter := pulseinteractionscore.NewAnalyticsAdapter(cfg.CoreAPIURL, cfg.PulseAppID)
 	interactionsSvc := pulseinteractions.NewService(pulseinteractionspg.New(pool), realtimeAdapter, analyticsAdapter, ratelimit.New(redisClient))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc))
+	moodSvc := mood.NewService(moodpg.New(pool), pulsemodules.NewBondAdapter(bondSvc), moodcore.NewAnalyticsAdapter(cfg.CoreAPIURL, cfg.PulseAppID))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc))
 
 	addr := env("PULSE_HTTP_ADDR", ":8096")
 	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}

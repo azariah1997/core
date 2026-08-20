@@ -1,6 +1,6 @@
 name: mood
 owner: pulse
-lifecycle: planned
+lifecycle: experimental
 dependencies:
-  - core:groups
   - pulse-connections
+  - bond

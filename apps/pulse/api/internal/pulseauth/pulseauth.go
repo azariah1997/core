@@ -20,6 +20,7 @@ import (
 type callerCtxKey struct{}
 type clientCtxKey struct{}
 type tokenCtxKey struct{}
+type userCtxKey struct{}
 
 func WithCaller(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, callerCtxKey{}, userID)
@@ -64,6 +65,20 @@ func TokenFromContext(ctx context.Context) (string, bool) {
 	return t, ok
 }
 
+// WithUser attaches the full coresdk.User RequireUser already resolved
+// via UsersMe - so a module needing more than the caller's ID (e.g.
+// mood needing Timezone for Mood expiry, spec §26) reads it from
+// context instead of making a second, redundant UsersMe round trip.
+func WithUser(ctx context.Context, user coresdk.User) context.Context {
+	return context.WithValue(ctx, userCtxKey{}, user)
+}
+
+// UserFromContext returns the full caller User RequireUser resolved.
+func UserFromContext(ctx context.Context) (coresdk.User, bool) {
+	u, ok := ctx.Value(userCtxKey{}).(coresdk.User)
+	return u, ok
+}
+
 // RequireUser returns middleware that resolves the caller's real Core
 // User ID from the request's own Authorization header and attaches it
 // (plus the authenticated client that resolved it) to the request
@@ -86,6 +101,7 @@ func RequireUser(coreAPIURL string) func(http.Handler) http.Handler {
 			ctx := WithCaller(r.Context(), user.ID)
 			ctx = WithClient(ctx, client)
 			ctx = WithToken(ctx, token)
+			ctx = WithUser(ctx, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

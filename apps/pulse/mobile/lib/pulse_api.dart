@@ -79,6 +79,33 @@ class PulseApi {
         body: {'receiverId': receiverId, 'pattern': ?pattern},
         decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
       );
+
+  /// Today's Mood (product spec §22-27) - a single visual symbol plus
+  /// an audience; the server resolves audience into who can actually
+  /// see it, so the client never computes visibility itself.
+  Future<PulseMood> setMood(String emoji, String audience, {List<String>? customUserIds}) => _client.request(
+        'PUT',
+        '/v1/pulse/mood',
+        body: {'emoji': emoji, 'audience': audience, 'customUserIds': ?customUserIds},
+        decode: (json) => PulseMood.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<void> clearMood() => _client.request('DELETE', '/v1/pulse/mood');
+
+  Future<PulseMood> myMood() => _client.request(
+        'GET',
+        '/v1/pulse/mood/me',
+        decode: (json) => PulseMood.fromJson(json as Map<String, dynamic>),
+      );
+
+  /// Throws a real 404 ApiError both when userId has no Mood set and
+  /// when one exists but the caller isn't in its audience - the server
+  /// deliberately never distinguishes the two (see mood.Service.Get).
+  Future<PulseMood> viewMood(String userId) => _client.request(
+        'GET',
+        '/v1/pulse/mood/$userId',
+        decode: (json) => PulseMood.fromJson(json as Map<String, dynamic>),
+      );
 }
 
 class PulseConnection {
@@ -108,6 +135,20 @@ class PulseInteraction {
         id: json['id'] as String,
         status: json['status'] as String,
         durationMs: json['durationMs'] as int?,
+      );
+}
+
+class PulseMood {
+  final String userId;
+  final String emoji;
+  final String expiresAt;
+
+  PulseMood({required this.userId, required this.emoji, required this.expiresAt});
+
+  factory PulseMood.fromJson(Map<String, dynamic> json) => PulseMood(
+        userId: json['userId'] as String,
+        emoji: json['emoji'] as String,
+        expiresAt: json['expiresAt'] as String,
       );
 }
 

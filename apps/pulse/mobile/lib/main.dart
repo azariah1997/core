@@ -251,7 +251,7 @@ class _HomeShellState extends State<HomeShell> {
     final pages = [
       _HomeTab(pulseApi: widget.pulseApi, haptics: _haptics),
       const _PlaceholderTab(title: 'People', subtitle: 'Partner Bond, Close Friends, Friends, Circles — Phase 9'),
-      const _PlaceholderTab(title: 'Mood', subtitle: "Today's Mood — Phase 8"),
+      _MoodTab(pulseApi: widget.pulseApi),
       const _PlaceholderTab(title: 'Moments', subtitle: 'Saved shared moments, no chat — Phase 12'),
       _ProfileTab(pulseApi: widget.pulseApi),
     ];
@@ -337,6 +337,12 @@ class _HomeTabState extends State<_HomeTab> {
   PulseConnection? _target;
   String? _error;
   bool _loadingConnections = true;
+  // The target's own Today's Mood (product spec §27: "a user sees
+  // another person's Mood and can respond without words") - null means
+  // either no Mood is set or the caller isn't in its audience; the
+  // server deliberately makes those indistinguishable, so this widget
+  // never tries to tell them apart either.
+  String? _targetMoodEmoji;
 
   bool _holding = false;
   String? _activeInteractionId;
@@ -360,11 +366,26 @@ class _HomeTabState extends State<_HomeTab> {
         _target = active.isNotEmpty ? active.first : null;
         _loadingConnections = false;
       });
+      _loadTargetMood();
     } catch (err) {
       setState(() {
         _error = '$err';
         _loadingConnections = false;
       });
+    }
+  }
+
+  Future<void> _loadTargetMood() async {
+    final target = _target;
+    setState(() => _targetMoodEmoji = null);
+    if (target == null) return;
+    try {
+      final mood = await widget.pulseApi.viewMood(target.otherUserId);
+      if (mounted && _target?.otherUserId == target.otherUserId) {
+        setState(() => _targetMoodEmoji = mood.emoji);
+      }
+    } catch (_) {
+      // No visible Mood - not an error worth surfacing here.
     }
   }
 
@@ -455,7 +476,12 @@ class _HomeTabState extends State<_HomeTab> {
                     .map((c) => ChoiceChip(
                           label: Text(c.otherUserId.substring(0, 8)),
                           selected: c.relationshipId == target.relationshipId,
-                          onSelected: _holding ? null : (_) => setState(() => _target = c),
+                          onSelected: _holding
+                              ? null
+                              : (_) {
+                                  setState(() => _target = c);
+                                  _loadTargetMood();
+                                },
                         ))
                     .toList(),
               ),
@@ -480,7 +506,12 @@ class _HomeTabState extends State<_HomeTab> {
           const SizedBox(height: 16),
           Text(_holding ? 'Holding… ${(_elapsed.inMilliseconds / 1000).toStringAsFixed(1)}s' : 'Hold to Pulse'),
           const SizedBox(height: 4),
-          Text('to @${target.otherUserId.substring(0, 8)} (${target.classification})', style: Theme.of(context).textTheme.bodySmall),
+          Text(
+            _targetMoodEmoji == null
+                ? 'to @${target.otherUserId.substring(0, 8)} (${target.classification})'
+                : 'to @${target.otherUserId.substring(0, 8)} (${target.classification}) — feeling $_targetMoodEmoji',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
           const SizedBox(height: 12),
           OutlinedButton(
             key: const Key('knockButton'),
@@ -494,6 +525,145 @@ class _HomeTabState extends State<_HomeTab> {
           if (_error != null) ...[
             const SizedBox(height: 12),
             Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Today's Mood (product spec §22-27, Phase 8): a single visual symbol,
+/// not a status sentence (spec §23's own design philosophy) - the
+/// server resolves the chosen audience into who can actually see it, so
+/// this widget only ever sends the audience label, never a computed
+/// viewer list.
+class _MoodTab extends StatefulWidget {
+  final PulseApi pulseApi;
+  const _MoodTab({required this.pulseApi});
+
+  @override
+  State<_MoodTab> createState() => _MoodTabState();
+}
+
+class _MoodTabState extends State<_MoodTab> {
+  static const _emojis = ['☀️', '🌧️', '🌙', '🔥', '🌊', '🫂', '❤️', '💤'];
+  static const _audiences = ['private', 'partner_only', 'close_friends', 'all_connections'];
+
+  String? _selectedEmoji;
+  String _selectedAudience = 'all_connections';
+  PulseMood? _current;
+  bool _loading = true;
+  String? _error;
+  String? _status;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrent();
+  }
+
+  Future<void> _loadCurrent() async {
+    try {
+      final m = await widget.pulseApi.myMood();
+      if (mounted) setState(() => _current = m);
+    } catch (_) {
+      // No Mood currently set - same as a 404, not an error worth
+      // surfacing on first load.
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _set() async {
+    final emoji = _selectedEmoji;
+    if (emoji == null) return;
+    setState(() {
+      _status = null;
+      _error = null;
+    });
+    try {
+      final m = await widget.pulseApi.setMood(emoji, _selectedAudience);
+      setState(() {
+        _current = m;
+        _status = 'Mood set';
+      });
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  Future<void> _clear() async {
+    try {
+      await widget.pulseApi.clearMood();
+      setState(() {
+        _current = null;
+        _status = 'Mood cleared';
+      });
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text("Today's Mood", style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 4),
+          Text('How am I feeling today? No words needed.', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 16),
+          if (_current != null) ...[
+            Center(child: Text(_current!.emoji, style: const TextStyle(fontSize: 48))),
+            const SizedBox(height: 4),
+            Center(child: Text('Visible until ${_current!.expiresAt}', style: Theme.of(context).textTheme.bodySmall)),
+            const SizedBox(height: 8),
+            Center(
+              child: OutlinedButton(key: const Key('clearMoodButton'), onPressed: _clear, child: const Text('Clear Mood')),
+            ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+          ],
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.center,
+            children: _emojis
+                .map((e) => ChoiceChip(
+                      label: Text(e, style: const TextStyle(fontSize: 20)),
+                      selected: _selectedEmoji == e,
+                      onSelected: (_) => setState(() => _selectedEmoji = e),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 16),
+          Center(
+            child: DropdownButton<String>(
+              key: const Key('moodAudienceDropdown'),
+              value: _selectedAudience,
+              items: _audiences.map((a) => DropdownMenuItem(value: a, child: Text(a.replaceAll('_', ' ')))).toList(),
+              onChanged: (v) => setState(() => _selectedAudience = v ?? _selectedAudience),
+            ),
+          ),
+          const SizedBox(height: 16),
+          FilledButton(
+            key: const Key('setMoodButton'),
+            onPressed: _selectedEmoji == null ? null : _set,
+            child: const Text('Set Mood'),
+          ),
+          if (_status != null) ...[
+            const SizedBox(height: 12),
+            Center(child: Text(_status!, style: TextStyle(color: Theme.of(context).colorScheme.primary))),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Center(child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
           ],
         ],
       ),
