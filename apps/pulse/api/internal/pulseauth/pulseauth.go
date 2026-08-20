@@ -19,6 +19,7 @@ import (
 
 type callerCtxKey struct{}
 type clientCtxKey struct{}
+type tokenCtxKey struct{}
 
 func WithCaller(ctx context.Context, userID string) context.Context {
 	return context.WithValue(ctx, callerCtxKey{}, userID)
@@ -48,6 +49,21 @@ func ClientFromContext(ctx context.Context) (*coresdk.Client, bool) {
 	return c, ok
 }
 
+// WithToken attaches the caller's raw bearer token to ctx - needed
+// (unlike WithClient's already-built core-api client) whenever a module
+// must authenticate to a *different* Core service with the same
+// identity, e.g. pulse-interactions checking realtime-gateway's own
+// GET /v1/presence/{userId} as the current caller.
+func WithToken(ctx context.Context, token string) context.Context {
+	return context.WithValue(ctx, tokenCtxKey{}, token)
+}
+
+// TokenFromContext returns the caller's raw bearer token.
+func TokenFromContext(ctx context.Context) (string, bool) {
+	t, ok := ctx.Value(tokenCtxKey{}).(string)
+	return t, ok
+}
+
 // RequireUser returns middleware that resolves the caller's real Core
 // User ID from the request's own Authorization header and attaches it
 // (plus the authenticated client that resolved it) to the request
@@ -69,6 +85,7 @@ func RequireUser(coreAPIURL string) func(http.Handler) http.Handler {
 			}
 			ctx := WithCaller(r.Context(), user.ID)
 			ctx = WithClient(ctx, client)
+			ctx = WithToken(ctx, token)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

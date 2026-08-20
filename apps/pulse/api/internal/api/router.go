@@ -27,6 +27,10 @@ const serviceName = "pulse-api"
 type Config struct {
 	Version    string
 	CoreAPIURL string
+	// RealtimeAPIURL is realtime-gateway's own base URL - pulse-
+	// interactions' presence check (Phase 5) is the one thing this
+	// service calls there directly.
+	RealtimeAPIURL string
 	// PulseAppID is Pulse's own real Core Application ID (registered
 	// once via POST /v1/apps during Phase 1) - every Core relationships
 	// call pulse-connections makes needs it.
@@ -61,7 +65,13 @@ func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, conne
 	newInteractionsCore := func(client *coresdk.Client) pulseinteractions.CoreRelationships {
 		return pulseinteractionscore.NewRelationshipsAdapter(client, cfg.PulseAppID)
 	}
-	pulseinteractions.RegisterRoutes(mux, interactionsSvc, newInteractionsCore, requireUser)
+	newPresence := func(token string) pulseinteractions.Presence {
+		return pulseinteractionscore.NewPresenceAdapter(cfg.RealtimeAPIURL, token)
+	}
+	newNotifier := func(client *coresdk.Client) pulseinteractions.Notifier {
+		return pulseinteractionscore.NewNotifierAdapter(client, cfg.PulseAppID)
+	}
+	pulseinteractions.RegisterRoutes(mux, interactionsSvc, newInteractionsCore, newPresence, newNotifier, requireUser)
 
 	return metrics.Middleware(serviceName, mux, corsMiddleware(correlation.Middleware(mux)))
 }

@@ -82,12 +82,12 @@ func (r *Repository) Get(ctx context.Context, id string) (pulseinteractions.Inte
 	return i, err
 }
 
-func (r *Repository) Start(ctx context.Context, id string, startedAt time.Time) (pulseinteractions.Interaction, error) {
+func (r *Repository) Start(ctx context.Context, id string, startedAt time.Time, deliveryMode pulseinteractions.DeliveryMode) (pulseinteractions.Interaction, error) {
 	row := r.pool.QueryRow(ctx, `
-		UPDATE interactions SET status = 'started', started_at = $2, updated_at = $2
+		UPDATE interactions SET status = 'started', started_at = $2, delivery_mode = $3, updated_at = $2
 		WHERE id = $1
 		RETURNING `+interactionColumns,
-		id, startedAt)
+		id, startedAt, string(deliveryMode))
 	i, err := scanInteraction(row)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return pulseinteractions.Interaction{}, pulseinteractions.ErrNotFound

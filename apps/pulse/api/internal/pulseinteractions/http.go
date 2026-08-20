@@ -21,10 +21,21 @@ const timeFormat = "2006-01-02T15:04:05.000Z07:00"
 // import-cycle reason as pulse-connections/bond's own http.go.
 type CoreFactory func(client *coresdk.Client) CoreRelationships
 
-func RegisterRoutes(mux *http.ServeMux, svc *Service, newCore CoreFactory, requireUser func(http.Handler) http.Handler) {
+// PresenceFactory builds a Presence bound to the caller's raw bearer
+// token (not the core-api *coresdk.Client CoreFactory uses, since
+// presence lives on realtime-gateway - a different base URL, same
+// identity).
+type PresenceFactory func(token string) Presence
+
+// NotifierFactory builds a Notifier bound to one caller's authenticated
+// core-api client - notifications is a core-api route, so it reuses the
+// same client CoreFactory does, just a different adapter.
+type NotifierFactory func(client *coresdk.Client) Notifier
+
+func RegisterRoutes(mux *http.ServeMux, svc *Service, newCore CoreFactory, newPresence PresenceFactory, newNotifier NotifierFactory, requireUser func(http.Handler) http.Handler) {
 	mux.Handle("POST /v1/pulse/interactions", requireUser(createHandler(svc, newCore)))
-	mux.Handle("POST /v1/pulse/interactions/{id}/start", requireUser(startHandler(svc)))
-	mux.Handle("POST /v1/pulse/interactions/{id}/stop", requireUser(stopHandler(svc)))
+	mux.Handle("POST /v1/pulse/interactions/{id}/start", requireUser(startHandler(svc, newPresence)))
+	mux.Handle("POST /v1/pulse/interactions/{id}/stop", requireUser(stopHandler(svc, newNotifier)))
 	mux.Handle("GET /v1/pulse/interactions/{id}", requireUser(getHandler(svc)))
 	mux.Handle("GET /v1/pulse/interactions", requireUser(listMineHandler(svc)))
 }
@@ -93,14 +104,19 @@ func createHandler(svc *Service, newCore CoreFactory) http.HandlerFunc {
 	}
 }
 
-func startHandler(svc *Service) http.HandlerFunc {
+func startHandler(svc *Service, newPresence PresenceFactory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		callerID, ok := pulseauth.FromContext(r.Context())
 		if !ok {
 			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller missing from context"))
 			return
 		}
-		i, err := svc.Start(r.Context(), callerID, r.PathValue("id"))
+		token, ok := pulseauth.TokenFromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller token missing from context"))
+			return
+		}
+		i, err := svc.Start(r.Context(), newPresence(token), callerID, r.PathValue("id"))
 		if err != nil {
 			writeDomainError(w, r, err)
 			return
@@ -109,14 +125,19 @@ func startHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
-func stopHandler(svc *Service) http.HandlerFunc {
+func stopHandler(svc *Service, newNotifier NotifierFactory) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		callerID, ok := pulseauth.FromContext(r.Context())
 		if !ok {
 			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller missing from context"))
 			return
 		}
-		i, err := svc.Stop(r.Context(), callerID, r.PathValue("id"))
+		client, ok := pulseauth.ClientFromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "core client missing from context"))
+			return
+		}
+		i, err := svc.Stop(r.Context(), newNotifier(client), callerID, r.PathValue("id"))
 		if err != nil {
 			writeDomainError(w, r, err)
 			return

@@ -74,16 +74,21 @@ func (s *Service) Create(ctx context.Context, core CoreRelationships, callerID s
 	now := time.Now().UTC()
 	i := Interaction{
 		ID: uuid.NewString(), Type: TypePulse, SenderID: callerID, ReceiverID: in.ReceiverID,
-		DeliveryMode: DeliveryLive, Status: StatusCreated, CreatedAt: now, UpdatedAt: now,
+		Status: StatusCreated, CreatedAt: now, UpdatedAt: now,
 	}
 	return s.repo.Create(ctx, i, in.ClientRequestID)
 }
 
-// Start is PulseStart (spec §15): the sender began holding. Delivers a
-// best-effort real-time push to the receiver - never a guarantee, since
-// rtbus has no delivery confirmation; a receiver who never sees this
-// still gets the durable pulse_completed record once Stop is called.
-func (s *Service) Start(ctx context.Context, callerID, id string) (Interaction, error) {
+// Start is PulseStart (spec §15): the sender began holding. Decides
+// Live vs. Push once, from a real presence check against
+// realtime-gateway (spec §4: never re-decided mid-interaction, no
+// "best effort" blend) - fails closed to Push if presence itself can't
+// be checked, since an honest "assume offline" is safer than a live
+// attempt that silently goes nowhere. Live delivers a best-effort
+// real-time push immediately; Push makes no delivery attempt yet at
+// all - the single push notification goes out once, at Stop, carrying
+// the real final duration (spec §4.2).
+func (s *Service) Start(ctx context.Context, presence Presence, callerID, id string) (Interaction, error) {
 	i, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return Interaction{}, err
@@ -94,20 +99,31 @@ func (s *Service) Start(ctx context.Context, callerID, id string) (Interaction, 
 	if i.Status != StatusCreated {
 		return Interaction{}, ErrInvalidTransition
 	}
+
+	deliveryMode := DeliveryPush
+	if online, err := presence.IsOnline(ctx, i.ReceiverID); err == nil && online {
+		deliveryMode = DeliveryLive
+	}
+
 	now := time.Now().UTC()
-	started, err := s.repo.Start(ctx, id, now)
+	started, err := s.repo.Start(ctx, id, now, deliveryMode)
 	if err != nil {
 		return Interaction{}, err
 	}
-	s.publishPush(ctx, "pulse.started", started.ReceiverID, map[string]any{
-		"interactionId": started.ID, "senderId": started.SenderID, "startedAt": now.Format(time.RFC3339Nano),
-	})
+	if deliveryMode == DeliveryLive {
+		s.publishPush(ctx, "pulse.started", started.ReceiverID, map[string]any{
+			"interactionId": started.ID, "senderId": started.SenderID, "startedAt": now.Format(time.RFC3339Nano),
+		})
+	}
 	return started, nil
 }
 
 // Stop is PulseStop (spec §15): duration is computed server-side from
 // the row's own StartedAt, never a client-submitted value (spec §78).
-func (s *Service) Stop(ctx context.Context, callerID, id string) (Interaction, error) {
+// Live interactions get a second best-effort realtime push; Push
+// interactions get their one real push notification here, now that the
+// final duration is known.
+func (s *Service) Stop(ctx context.Context, notifier Notifier, callerID, id string) (Interaction, error) {
 	i, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return Interaction{}, err
@@ -123,12 +139,21 @@ func (s *Service) Stop(ctx context.Context, callerID, id string) (Interaction, e
 	if err != nil {
 		return Interaction{}, err
 	}
-	s.publishPush(ctx, "pulse.stopped", completed.ReceiverID, map[string]any{
-		"interactionId": completed.ID, "endedAt": now.Format(time.RFC3339Nano),
-	})
 	durationMs := 0
 	if completed.DurationMs != nil {
 		durationMs = *completed.DurationMs
+	}
+	switch completed.DeliveryMode {
+	case DeliveryLive:
+		s.publishPush(ctx, "pulse.stopped", completed.ReceiverID, map[string]any{
+			"interactionId": completed.ID, "endedAt": now.Format(time.RFC3339Nano),
+		})
+	case DeliveryPush:
+		// Best-effort, same as live delivery - a failed push request
+		// (e.g. the receiver has no registered device) never fails the
+		// underlying Stop call; the durable interaction record already
+		// captured what happened.
+		_ = notifier.NotifyPulseReceived(ctx, completed.ReceiverID, durationMs)
 	}
 	s.trackCompleted(ctx, completed, durationMs)
 	return completed, nil

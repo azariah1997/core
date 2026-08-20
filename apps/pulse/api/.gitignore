@@ -1,0 +1,11 @@
+# Compiled binaries from `go build ./cmd/<name>/...` land here (this
+# directory), named after <name> - go run avoids this, but a plain
+# build during ad-hoc verification can leave one behind. Throwaway
+# verification programs under cmd/ are deleted after use per
+# docs/RUNBOOKS.md's bootstrap pattern; this backstops a compiled
+# artifact outliving that cleanup. Add new names here if they recur.
+/pulselivecheck
+/pulselivecheck2
+/presencecheck
+/bondracecheck
+/resyncadmin

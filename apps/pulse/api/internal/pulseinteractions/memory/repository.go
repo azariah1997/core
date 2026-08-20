@@ -46,7 +46,7 @@ func (r *Repository) Get(ctx context.Context, id string) (pulseinteractions.Inte
 	return i, nil
 }
 
-func (r *Repository) Start(ctx context.Context, id string, startedAt time.Time) (pulseinteractions.Interaction, error) {
+func (r *Repository) Start(ctx context.Context, id string, startedAt time.Time, deliveryMode pulseinteractions.DeliveryMode) (pulseinteractions.Interaction, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	i, ok := r.byID[id]
@@ -55,6 +55,7 @@ func (r *Repository) Start(ctx context.Context, id string, startedAt time.Time) 
 	}
 	i.Status = pulseinteractions.StatusStarted
 	i.StartedAt = &startedAt
+	i.DeliveryMode = deliveryMode
 	i.UpdatedAt = startedAt
 	r.byID[id] = i
 	return i, nil

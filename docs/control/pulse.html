@@ -199,8 +199,9 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">5 / 18</div><div class="label">Phases complete (Audit, Foundation, Connections, Bond, Basic Pulse)</div></div>
+    <div class="stat-pill"><div class="num">6 / 18</div><div class="label">Phases complete (Audit → Push Fallback)</div></div>
     <div class="stat-pill"><div class="num">4 / 10</div><div class="label">Pulse domain modules live</div></div>
+    <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
     <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
     <div class="stat-pill"><div class="num">Flutter</div><div class="label">Mobile — apps/pulse/mobile, live end to end</div></div>
@@ -661,9 +662,16 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">5</span>Push Fallback <span class="badge pending">Pending</span></h3>
-    <p>Receiver offline → Core Notification → push. iOS and Android validated and documented separately.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">5</span>Push Fallback <span class="badge done">Done</span></h3>
+    <p>Receiver offline → real presence check → Core Notification → push, live-validated end to end - including both an honest real failure (no registered device) and a genuine real success (after registering one). Required two real, carefully-scoped Core changes, both decided with explicit user sign-off since they touch shared platform capabilities: <code>realtime-gateway</code> gained <code>GET /v1/presence/{userId}</code> (exposing its already-existing presence tracker), and <code>notifications.Send</code> was relaxed from self-or-admin to any authenticated caller, attributed via a new <code>SentByUserID</code> field. 6 new backend tests for the delivery-mode decision alone (live/push/presence-failure/notification-failure), on top of Phase 4's suite.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Real presence check decides Live vs. Push once, at Start - never re-decided mid-interaction</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Push notification requested via Core's real notifications.Send, never a direct FCM/APNs call</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Fails closed to Push if the presence check itself can't be completed</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>A failed push request never fails the underlying Stop call - the durable interaction record is the source of truth</li>
+      <li><div class="box"></div>iOS and Android platform-specific push behaviour - documented as a known gap, no real device/simulator available in this environment (see Risks)</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">

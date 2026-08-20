@@ -78,9 +78,10 @@ func main() {
 	defer func() { _ = redisClient.Close() }()
 
 	cfg := api.Config{
-		Version:    config.Load().Version,
-		CoreAPIURL: env("CORE_API_URL", "http://localhost:8080"),
-		PulseAppID: env("PULSE_APP_ID", ""),
+		Version:        config.Load().Version,
+		CoreAPIURL:     env("CORE_API_URL", "http://localhost:8080"),
+		RealtimeAPIURL: env("REALTIME_API_URL", "http://localhost:8090"),
+		PulseAppID:     env("PULSE_APP_ID", ""),
 	}
 	if cfg.PulseAppID == "" {
 		logger.Error("PULSE_APP_ID is required - register Pulse via POST /v1/apps first (see apps/pulse/api/README.md)")

@@ -101,3 +101,48 @@ func (a AnalyticsAdapter) Track(ctx context.Context, eventName, userID string, p
 	defer resp.Body.Close()
 	return nil
 }
+
+// PresenceAdapter calls realtime-gateway's real GET /v1/presence/{userId}
+// (Phase 5) using the caller's own bearer token - a second *coresdk.Client
+// pointed at a different base URL than the one CoreFactory builds,
+// since presence lives on realtime-gateway, not core-api.
+type PresenceAdapter struct {
+	client *coresdk.Client
+}
+
+func NewPresenceAdapter(realtimeAPIURL, token string) PresenceAdapter {
+	client := coresdk.NewClient(realtimeAPIURL, coresdk.WithTokenSource(coresdk.StaticTokenSource(token)), coresdk.WithRetries(1, 0))
+	return PresenceAdapter{client: client}
+}
+
+func (a PresenceAdapter) IsOnline(ctx context.Context, userID string) (bool, error) {
+	var out struct {
+		Online bool `json:"online"`
+	}
+	if err := a.client.Do(ctx, "GET", "/v1/presence/"+userID, nil, &out); err != nil {
+		return false, err
+	}
+	return out.Online, nil
+}
+
+// NotifierAdapter calls Core's real POST /v1/notifications using the
+// caller's own authenticated client - now that Send allows any
+// authenticated caller to notify any user (see notifications/README.md),
+// this is a real, attributed, cross-user push request, not a workaround.
+type NotifierAdapter struct {
+	client *coresdk.Client
+	appID  string
+}
+
+func NewNotifierAdapter(client *coresdk.Client, appID string) NotifierAdapter {
+	return NotifierAdapter{client: client, appID: appID}
+}
+
+func (a NotifierAdapter) NotifyPulseReceived(ctx context.Context, receiverUserID string, durationMs int) error {
+	body := map[string]any{
+		"appId": a.appID, "userId": receiverUserID, "category": "pulse_received",
+		"channels": []string{"push"}, "title": "Pulse", "body": "You received a Pulse",
+		"data": map[string]any{"durationMs": durationMs},
+	}
+	return a.client.Do(ctx, "POST", "/v1/notifications", body, nil)
+}

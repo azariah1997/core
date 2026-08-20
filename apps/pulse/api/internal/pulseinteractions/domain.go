@@ -1,12 +1,12 @@
 // Package pulseinteractions is Pulse's core mechanic (product spec
-// §13-17, Phase 4): press-and-hold Pulse, felt live on the other end.
-// This phase implements the live path only - PulseStart/PulseStop
-// delivered over Core's real realtime infrastructure while the
-// receiver is connected. Offline/background push fallback (spec §4.2)
-// is deliberately deferred to Phase 5, matching the roadmap's own
-// phase split; DeliveryMode "push"/"deferred" and the
-// PUSH_REQUESTED/PUSH_SENT/OPENED states from spec §16 are not
-// implemented yet.
+// §13-17): press-and-hold Pulse, felt live on the other end when the
+// receiver is connected (Phase 4), falling back to a durable push
+// notification when they're not (Phase 5, spec §4.2). Which path a
+// given Pulse takes is decided once, at Start, from a real presence
+// check against realtime-gateway - never guessed and never re-decided
+// mid-interaction. The PUSH_REQUESTED/PUSH_SENT/OPENED sub-states from
+// spec §16 are still not implemented - DeliveryMode (live vs. push) is
+// the granularity this phase actually needs and can honestly confirm.
 package pulseinteractions
 
 import (
@@ -34,13 +34,18 @@ const (
 type DeliveryMode string
 
 const (
-	// DeliveryLive is this phase's only mode: a best-effort real-time
-	// push while the interaction is live. rtbus.ToUser has no delivery
-	// confirmation (it fans out to Redis regardless of whether anyone
-	// is actually connected), so this phase deliberately does not claim
-	// a "live_delivered" status without real acknowledgment - see
-	// VALIDATION-style notes for this phase's honest scope.
+	// DeliveryLive: the receiver was online (real presence check) when
+	// Start was called - a best-effort real-time push at Start and at
+	// Stop. rtbus.ToUser has no delivery confirmation (it fans out to
+	// Redis regardless of whether anyone is actually connected), so
+	// this never claims a "live_delivered" status without real
+	// acknowledgment - "live" describes the attempted path, not a
+	// confirmed outcome.
 	DeliveryLive DeliveryMode = "live"
+	// DeliveryPush: the receiver was offline at Start - no live attempt
+	// is made at all; a single durable push notification (spec §4.2)
+	// is requested once, at Stop, carrying the real final duration.
+	DeliveryPush DeliveryMode = "push"
 )
 
 // RelationshipType values pulse-interactions checks for an active
@@ -127,6 +132,27 @@ type Analytics interface {
 	Track(ctx context.Context, eventName, userID string, properties map[string]any) error
 }
 
+// Presence answers "is this user connected right now" - resolved
+// per-caller (the sender's own token, forwarded to realtime-gateway's
+// real GET /v1/presence/{userId}), never a fixed service-level
+// credential, the same pattern CoreRelationships uses.
+type Presence interface {
+	IsOnline(ctx context.Context, userID string) (bool, error)
+}
+
+// Notifier requests a durable push notification via Core's real
+// notifications.Send (spec §71: "Pulse must not call APNs/FCM
+// directly"), resolved per-caller so the send is attributed to the
+// real sender (see notifications/README.md for why cross-user Send is
+// now allowed at all). Content is deliberately generic ("New Pulse",
+// spec §72's Private tier default) rather than naming the sender - that
+// needs pulse-profile's handle, a cross-module dependency not worth
+// taking on for this phase's actual requirement (a real push arrives at
+// all), and content-level privacy preferences are Phase 13's job.
+type Notifier interface {
+	NotifyPulseReceived(ctx context.Context, receiverUserID string, durationMs int) error
+}
+
 // RateLimiter is satisfied directly by platformkit/ratelimit.Limiter -
 // the same reused-not-reimplemented pattern trustsafety's own
 // RateLimiter interface already established for this exact type.
@@ -141,7 +167,9 @@ type Repository interface {
 	// row rather than creating a duplicate (spec §76).
 	Create(ctx context.Context, i Interaction, clientRequestID string) (Interaction, error)
 	Get(ctx context.Context, id string) (Interaction, error)
-	Start(ctx context.Context, id string, startedAt time.Time) (Interaction, error)
+	// Start also persists deliveryMode - decided once, from a real
+	// presence check, and never re-decided mid-interaction.
+	Start(ctx context.Context, id string, startedAt time.Time, deliveryMode DeliveryMode) (Interaction, error)
 	// Stop computes DurationMs server-side from the row's own
 	// StartedAt, never trusting a client-submitted value (spec §15,
 	// §78 - "server timestamps are truth").
