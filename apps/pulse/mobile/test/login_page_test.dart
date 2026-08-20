@@ -47,6 +47,55 @@ http.Client _fakeBackend({bool failLogin = false}) {
         headers: {'content-type': 'application/json'},
       );
     }
+    if (req.url.path == '/v1/pulse/connections') {
+      return http.Response(
+        jsonEncode({
+          'items': [
+            {'relationshipId': 'rel-1', 'otherUserId': 'user-2friend', 'status': 'active', 'classification': 'friend'},
+          ],
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.url.path == '/v1/pulse/interactions') {
+      return http.Response(
+        jsonEncode({'id': 'interaction-1', 'type': 'pulse', 'otherUserId': 'user-2friend', 'role': 'sender', 'status': 'created', 'deliveryMode': 'live', 'createdAt': '2026-01-01T00:00:00.000Z'}),
+        201,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.url.path == '/v1/pulse/interactions/interaction-1/start') {
+      return http.Response(
+        jsonEncode({'id': 'interaction-1', 'type': 'pulse', 'otherUserId': 'user-2friend', 'role': 'sender', 'status': 'started', 'deliveryMode': 'live', 'createdAt': '2026-01-01T00:00:00.000Z'}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.url.path == '/v1/pulse/interactions/interaction-1/stop') {
+      return http.Response(
+        jsonEncode({'id': 'interaction-1', 'type': 'pulse', 'otherUserId': 'user-2friend', 'role': 'sender', 'status': 'completed', 'deliveryMode': 'live', 'durationMs': 842, 'createdAt': '2026-01-01T00:00:00.000Z'}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.url.path == '/v1/users/me/devices') {
+      return http.Response(
+        jsonEncode({
+          'id': 'device-1',
+          'clientDeviceId': 'pulse-mobile',
+          'platform': 'flutter',
+          'locale': 'en-US',
+          'timezone': 'UTC',
+          'hasPushToken': false,
+          'sessionStatus': 'active',
+          'lastActiveAt': '2026-01-01T00:00:00.000Z',
+          'createdAt': '2026-01-01T00:00:00.000Z',
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
     return http.Response('not found', 404);
   });
 }
@@ -82,6 +131,21 @@ void main() {
 
     expect(find.textContaining('Invalid user credentials'), findsOneWidget);
     expect(find.text('Hold to Pulse'), findsNothing);
+  });
+
+  testWidgets('pressing and releasing the Home button sends a real Pulse round trip', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(tester.getCenter(find.byKey(const Key('pulseButton'))));
+    await tester.pump();
+    expect(find.textContaining('Holding…'), findsOneWidget);
+
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Pulse sent — felt for 842ms'), findsOneWidget);
   });
 
   testWidgets('the Profile tab round-trips through the real pulse-api chain', (tester) async {

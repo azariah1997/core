@@ -26,6 +26,68 @@ class PulseApi {
         '/v1/pulse/profile/me',
         decode: (json) => PulseProfile.fromJson(json as Map<String, dynamic>),
       );
+
+  Future<List<PulseConnection>> listConnections() => _client.request(
+        'GET',
+        '/v1/pulse/connections',
+        decode: (json) => ((json as Map<String, dynamic>)['items'] as List)
+            .map((e) => PulseConnection.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+
+  /// Creates and immediately starts a Pulse in one call - the mobile
+  /// app's "press and hold" begins the instant the finger goes down
+  /// (product spec §13), so there's no meaningful gap between create
+  /// and start from the user's perspective.
+  Future<PulseInteraction> createAndStart(String receiverId) async {
+    final created = await _client.request(
+      'POST',
+      '/v1/pulse/interactions',
+      body: {'type': 'pulse', 'receiverId': receiverId},
+      decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
+    );
+    return _client.request(
+      'POST',
+      '/v1/pulse/interactions/${created.id}/start',
+      decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
+    );
+  }
+
+  Future<PulseInteraction> stop(String interactionId) => _client.request(
+        'POST',
+        '/v1/pulse/interactions/$interactionId/stop',
+        decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
+      );
+}
+
+class PulseConnection {
+  final String relationshipId;
+  final String otherUserId;
+  final String status;
+  final String classification;
+
+  PulseConnection({required this.relationshipId, required this.otherUserId, required this.status, required this.classification});
+
+  factory PulseConnection.fromJson(Map<String, dynamic> json) => PulseConnection(
+        relationshipId: json['relationshipId'] as String,
+        otherUserId: json['otherUserId'] as String,
+        status: json['status'] as String,
+        classification: json['classification'] as String,
+      );
+}
+
+class PulseInteraction {
+  final String id;
+  final String status;
+  final int? durationMs;
+
+  PulseInteraction({required this.id, required this.status, this.durationMs});
+
+  factory PulseInteraction.fromJson(Map<String, dynamic> json) => PulseInteraction(
+        id: json['id'] as String,
+        status: json['status'] as String,
+        durationMs: json['durationMs'] as int?,
+      );
 }
 
 class PulseProfile {

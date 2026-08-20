@@ -199,8 +199,8 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">4 / 18</div><div class="label">Phases complete (Audit, Foundation, Connections, Bond)</div></div>
-    <div class="stat-pill"><div class="num">3 / 10</div><div class="label">Pulse domain modules live</div></div>
+    <div class="stat-pill"><div class="num">5 / 18</div><div class="label">Phases complete (Audit, Foundation, Connections, Bond, Basic Pulse)</div></div>
+    <div class="stat-pill"><div class="num">4 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
     <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
     <div class="stat-pill"><div class="num">Flutter</div><div class="label">Mobile — apps/pulse/mobile, live end to end</div></div>
@@ -458,7 +458,7 @@ Core Platform</pre>
         <tr><td><code>pulse-profile</code> <span class="badge done">Done</span></td><td>Pulse-specific user extension</td><td>Core <code>users</code></td><td>1</td></tr>
         <tr><td><code>pulse-connections</code> <span class="badge done">Done</span></td><td>Friend / Close-Friend classification &amp; permissions</td><td>Core <code>relationships</code>, <code>groups</code></td><td>2</td></tr>
         <tr><td><code>bond</code> <span class="badge done">Done</span></td><td>One-active-Bond invariant, Bond lifecycle</td><td>Core <code>relationships</code>, pulse-connections</td><td>3</td></tr>
-        <tr><td><code>pulse-interactions</code></td><td>Pulse/Knock/MoodResponse state machine</td><td>relationships, notifications, devices, bond</td><td>4-7</td></tr>
+        <tr><td><code>pulse-interactions</code> <span class="badge done">Done (live path)</span></td><td>Pulse/Knock/MoodResponse state machine</td><td>relationships, rtbus, analytics, ratelimit</td><td>4-7</td></tr>
         <tr><td><code>mood</code></td><td>Today's Mood, audience, expiry</td><td>pulse-connections, groups</td><td>8</td></tr>
         <tr><td><code>live-touch</code></td><td>Synchronous touch session lifecycle</td><td>bond, pulse-connections, pulse-interactions</td><td>10</td></tr>
         <tr><td><code>signals</code></td><td>Custom touch-pattern storage</td><td>pulse-connections, bond</td><td>11</td></tr>
@@ -646,9 +646,19 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">4</span>Basic Pulse <span class="badge pending">Pending</span></h3>
-    <p>The critical phase: hold-to-Pulse, PulseStart/PulseStop, server-authoritative duration, realtime delivery, native haptic, durable completion, analytics, observability. Do not proceed until reliable between two devices/simulators.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">4</span>Basic Pulse <span class="badge done">Done</span></h3>
+    <p>The critical phase, and the product's actual core value. Hold-to-Pulse, real PulseStart/PulseStop (never a continuous stream), server-authoritative duration, live delivery, haptic feedback, durable completion, analytics, rate limiting - all live-validated end to end with two real Keycloak users, a real WebSocket connection through <code>realtime-gateway</code>, and a real analytics event landing in Core's own database. 23 new backend tests, 5 mobile widget tests, all passing.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Sender selects a connected receiver; press-and-hold with a live visual response</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>PulseStart/PulseStop reach the server; authorization checked (connected, not blocked, rate-limited)</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Receiver gets a real live push over WebSocket + native haptic (Standard tier - see Risks)</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Duration is server-calculated from the row's own timestamps, never trusted from the client</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Idempotent creation (client_request_id) prevents duplicate Pulses from mobile network retries</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Analytics event (pulse_completed) recorded via Core's real analytics ingest</li>
+      <li><div class="box"></div>Receiver-offline push fallback - deliberately deferred to Phase 5, matching the roadmap's own phase split</li>
+      <li><div class="box"></div>Advanced (Core Haptics) tier and real iOS/Android device testing - blocked on this environment's missing Android SDK/Xcode; see Risks</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">
@@ -772,7 +782,7 @@ PUT    /v1/pulse/preferences</pre>
   <h2>Risks</h2>
   <p class="hint">Named honestly now, before implementation, so they're designed around rather than discovered late.</p>
 
-  <div class="card"><span class="risk-num">1</span><b>iOS background haptic promises.</b> The single highest product risk named in the spec itself. Any implementation implying continuous remote vibration while backgrounded/locked on iOS misrepresents what the OS allows. Live Pulse and Offline Pulse must stay architecturally distinct code paths from Phase 4 onward — never a "best effort" blend. This session's environment has no Android SDK and an incomplete Xcode install, so native haptic behaviour cannot be end-to-end validated here until a real device/simulator is available — flag this honestly in every phase's validation.</div>
+  <div class="card"><span class="risk-num">1</span><b>iOS background haptic promises.</b> The single highest product risk named in the spec itself. Any implementation implying continuous remote vibration while backgrounded/locked on iOS misrepresents what the OS allows. Phase 4 built Live Pulse only (receiver online, foreground) as its own distinct code path — Offline/background Pulse is deliberately deferred to Phase 5, never blended in as a "best effort" fallback. Still open: real backgrounded-app behaviour on an actual device, blocked on the toolchain gap below.</div>
 
   <div class="card"><span class="risk-num">2</span><b>One-active-Bond concurrency.</b> Two simultaneous Bond requests targeting the same user must not both succeed. Needs a real concurrency test (two goroutines racing an accept) against Postgres with a partial unique index (<code>WHERE status = 'ACTIVE'</code>) as the actual enforcement mechanism — the same lesson Core's own billing/authz modules already learned about not trusting application-level-only invariants.</div>
 
@@ -782,7 +792,7 @@ PUT    /v1/pulse/preferences</pre>
 
   <div class="card"><span class="risk-num">5</span><b>Deep-link / invite-link growth loop intersects Trust &amp; Safety.</b> An open invite-link flow is a natural spam vector — must reuse trustsafety's rate limiting on invite creation, not just on Pulse/Knock sending.</div>
 
-  <div class="card"><span class="risk-num">6</span><b>Toolchain gap for real device testing.</b> This environment has Flutter but no Android SDK and an incomplete Xcode install. Live validation of native haptics — the product's actual core value — cannot happen end-to-end here without that toolchain. Name this gap honestly in every phase's validation rather than simulating haptic behaviour and calling it validated.</div>
+  <div class="card"><span class="risk-num">6</span><b>Toolchain gap for real device testing.</b> This environment has Flutter but no Android SDK and an incomplete Xcode install. Phase 4 shipped a real <code>HapticEngine</code> (Standard tier, Flutter's cross-platform <code>HapticFeedback</code> - genuinely felt on a real device, not a stub) and validated the full mechanic end to end via Chrome/web-server and a Go-based live-check hitting real infrastructure. Still not possible here: the Advanced tier (custom iOS Core Haptics patterns, spec §59, needs native Swift/Kotlin platform-channel code) and any real on-device backgrounded-app behaviour. Name this gap honestly in every phase's validation rather than simulating it.</div>
 </section>
 
 </main>

@@ -1,6 +1,6 @@
 name: pulse-interactions
 owner: pulse
-lifecycle: planned
+lifecycle: experimental
 dependencies:
   - core:relationships
   - core:notifications

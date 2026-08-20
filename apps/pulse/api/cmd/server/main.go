@@ -6,17 +6,25 @@ import (
 	"os"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/example/core-platform/apps/pulse/api/internal/api"
 	"github.com/example/core-platform/apps/pulse/api/internal/bond"
 	bondpg "github.com/example/core-platform/apps/pulse/api/internal/bond/postgres"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseconnections"
 	pulseconnectionspg "github.com/example/core-platform/apps/pulse/api/internal/pulseconnections/postgres"
+	"github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions"
+	pulseinteractionscore "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/core"
+	pulseinteractionspg "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/postgres"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseprofile"
 	pulseprofilepg "github.com/example/core-platform/apps/pulse/api/internal/pulseprofile/postgres"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
+	"github.com/example/core-platform/packages/go/platformkit/metrics"
 	"github.com/example/core-platform/packages/go/platformkit/otelx"
 	"github.com/example/core-platform/packages/go/platformkit/pg"
+	"github.com/example/core-platform/packages/go/platformkit/ratelimit"
+	"github.com/example/core-platform/packages/go/platformkit/rtbus"
 	"github.com/example/core-platform/packages/go/platformkit/runx"
 )
 
@@ -55,9 +63,19 @@ func main() {
 	defer pool.Close()
 	defer pg.ReportStats(ctx, serviceName, pool, 10*time.Second)()
 
-	profileSvc := pulseprofile.NewService(pulseprofilepg.New(pool))
-	connectionsSvc := pulseconnections.NewService(pulseconnectionspg.New(pool))
-	bondSvc := bond.NewService(bondpg.New(pool))
+	// Pulse's first Redis (Valkey) dependency - real-time delivery
+	// (rtbus, the shared contract realtime-gateway's hub already
+	// subscribes to) and rate limiting both need it. Same shared
+	// instance Core's own services use, addressed independently since
+	// pulse-api is its own deployable.
+	redisAddr := env("PULSE_REDIS_ADDR", "localhost:6379")
+	redisClient := redis.NewClient(&redis.Options{Addr: redisAddr})
+	metrics.InstrumentRedis(redisClient)
+	if err := redisClient.Ping(ctx).Err(); err != nil {
+		logger.Error("failed to connect to redis/valkey", "error", err)
+		os.Exit(1)
+	}
+	defer func() { _ = redisClient.Close() }()
 
 	cfg := api.Config{
 		Version:    config.Load().Version,
@@ -68,7 +86,16 @@ func main() {
 		logger.Error("PULSE_APP_ID is required - register Pulse via POST /v1/apps first (see apps/pulse/api/README.md)")
 		os.Exit(1)
 	}
-	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc))
+
+	profileSvc := pulseprofile.NewService(pulseprofilepg.New(pool))
+	connectionsSvc := pulseconnections.NewService(pulseconnectionspg.New(pool))
+	bondSvc := bond.NewService(bondpg.New(pool))
+
+	realtimeAdapter := pulseinteractionscore.NewRealtimeAdapter(rtbus.NewPublisher(redisClient))
+	analyticsAdapter := pulseinteractionscore.NewAnalyticsAdapter(cfg.CoreAPIURL, cfg.PulseAppID)
+	interactionsSvc := pulseinteractions.NewService(pulseinteractionspg.New(pool), realtimeAdapter, analyticsAdapter, ratelimit.New(redisClient))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc))
 
 	addr := env("PULSE_HTTP_ADDR", ":8096")
 	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
