@@ -32,29 +32,36 @@ type PresenceFactory func(token string) Presence
 // same client CoreFactory does, just a different adapter.
 type NotifierFactory func(client *coresdk.Client) Notifier
 
-func RegisterRoutes(mux *http.ServeMux, svc *Service, newCore CoreFactory, newPresence PresenceFactory, newNotifier NotifierFactory, requireUser func(http.Handler) http.Handler) {
+// RegisterRoutes takes signalsSvc directly (not a per-caller *Factory,
+// unlike CoreFactory/PresenceFactory/NotifierFactory below) - the
+// SignalsAdapter it's wrapped in needs no per-caller Core client, since
+// signals.Service.Get reads only Pulse's own Postgres and enforces
+// ownership itself (see internal/pulseinteractions/pulsemodules).
+func RegisterRoutes(mux *http.ServeMux, svc *Service, newCore CoreFactory, newPresence PresenceFactory, newNotifier NotifierFactory, signalsSvc Signals, requireUser func(http.Handler) http.Handler) {
 	mux.Handle("POST /v1/pulse/interactions", requireUser(createHandler(svc, newCore)))
 	mux.Handle("POST /v1/pulse/interactions/{id}/start", requireUser(startHandler(svc, newPresence)))
 	mux.Handle("POST /v1/pulse/interactions/{id}/stop", requireUser(stopHandler(svc, newNotifier)))
 	mux.Handle("POST /v1/pulse/interactions/{id}/pulse-back", requireUser(pulseBackHandler(svc, newCore, newPresence, newNotifier)))
 	mux.Handle("POST /v1/pulse/knocks", requireUser(knockHandler(svc, newCore, newPresence, newNotifier)))
+	mux.Handle("POST /v1/pulse/signals/{id}/send", requireUser(sendSignalHandler(svc, newCore, newPresence, newNotifier, signalsSvc)))
 	mux.Handle("GET /v1/pulse/interactions/{id}", requireUser(getHandler(svc)))
 	mux.Handle("GET /v1/pulse/interactions", requireUser(listMineHandler(svc)))
 }
 
 type interactionResponse struct {
-	ID             string  `json:"id"`
-	Type           string  `json:"type"`
-	OtherUserID    string  `json:"otherUserId"`
-	Role           string  `json:"role"` // "sender" or "receiver", from the caller's perspective
-	Status         string  `json:"status"`
-	DeliveryMode   string  `json:"deliveryMode"`
-	InResponseToID string  `json:"inResponseToId,omitempty"`
-	Pattern        string  `json:"pattern,omitempty"`
-	StartedAt      *string `json:"startedAt,omitempty"`
-	EndedAt        *string `json:"endedAt,omitempty"`
-	DurationMs     *int    `json:"durationMs,omitempty"`
-	CreatedAt      string  `json:"createdAt"`
+	ID             string    `json:"id"`
+	Type           string    `json:"type"`
+	OtherUserID    string    `json:"otherUserId"`
+	Role           string    `json:"role"` // "sender" or "receiver", from the caller's perspective
+	Status         string    `json:"status"`
+	DeliveryMode   string    `json:"deliveryMode"`
+	InResponseToID string    `json:"inResponseToId,omitempty"`
+	Pattern        string    `json:"pattern,omitempty"`
+	Segments       []Segment `json:"segments,omitempty"` // only meaningful for TypeSignal
+	StartedAt      *string   `json:"startedAt,omitempty"`
+	EndedAt        *string   `json:"endedAt,omitempty"`
+	DurationMs     *int      `json:"durationMs,omitempty"`
+	CreatedAt      string    `json:"createdAt"`
 }
 
 func toInteractionResponse(callerID string, i Interaction) interactionResponse {
@@ -70,7 +77,9 @@ func toInteractionResponse(callerID string, i Interaction) interactionResponse {
 	if i.InResponseToID != nil {
 		resp.InResponseToID = *i.InResponseToID
 	}
-	if i.Pattern != nil {
+	if i.Type == TypeSignal {
+		resp.Segments = i.Segments()
+	} else if i.Pattern != nil {
 		resp.Pattern = *i.Pattern
 	}
 	if i.StartedAt != nil {
@@ -218,6 +227,37 @@ func knockHandler(svc *Service, newCore CoreFactory, newPresence PresenceFactory
 		}
 		in := KnockInput{ReceiverID: body.ReceiverID, Pattern: KnockPattern(body.Pattern)}
 		i, err := svc.Knock(r.Context(), newCore(client), newPresence(token), newNotifier(client), callerID, in)
+		if err != nil {
+			writeDomainError(w, r, err)
+			return
+		}
+		httpx.JSON(w, http.StatusCreated, toInteractionResponse(callerID, i))
+	}
+}
+
+// sendSignalHandler needs the same three per-caller resources
+// knockHandler does, plus signalsSvc (fixed, not per-caller) to resolve
+// the caller's own saved pattern - spec §19-20's "the pattern itself is
+// the communication," delivered via the exact same live/push machinery
+// every other interaction Type already uses.
+func sendSignalHandler(svc *Service, newCore CoreFactory, newPresence PresenceFactory, newNotifier NotifierFactory, signalsSvc Signals) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		callerID, ok := pulseauth.FromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller missing from context"))
+			return
+		}
+		client, ok := pulseauth.ClientFromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "core client missing from context"))
+			return
+		}
+		token, ok := pulseauth.TokenFromContext(r.Context())
+		if !ok {
+			apperr.Write(w, r, apperr.New(apperr.CodeInternal, "caller token missing from context"))
+			return
+		}
+		i, err := svc.SendSignal(r.Context(), newCore(client), newPresence(token), newNotifier(client), signalsSvc, callerID, r.PathValue("id"))
 		if err != nil {
 			writeDomainError(w, r, err)
 			return

@@ -181,6 +181,37 @@ class PulseApi {
         '/v1/pulse/live-touch/sessions/$sessionId/end',
         decode: (json) => PulseLiveTouchSession.fromJson(json as Map<String, dynamic>),
       );
+
+  /// Custom Signals (product spec §19-20, Phase 11) - a private touch
+  /// pattern bound to exactly one specific connection ("the same
+  /// pattern means something different to different pairs"). segments
+  /// is a list of {'type': 'tap'|'hold'|'pause', 'durationMs': int}
+  /// maps - bounds (segment count, per-segment and total duration) are
+  /// enforced server-side, never merely a client-side UI limit.
+  Future<PulseSignal> createSignal(String targetUserId, String label, List<Map<String, dynamic>> segments) => _client.request(
+        'POST',
+        '/v1/pulse/signals',
+        body: {'targetUserId': targetUserId, 'label': label, 'segments': segments},
+        decode: (json) => PulseSignal.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<List<PulseSignal>> listSignals() => _client.request(
+        'GET',
+        '/v1/pulse/signals',
+        decode: (json) => ((json as Map<String, dynamic>)['items'] as List).map((e) => PulseSignal.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Future<void> deleteSignal(String id) => _client.request('DELETE', '/v1/pulse/signals/$id');
+
+  /// Felt exactly like a Pulse or Knock (live if the receiver is
+  /// connected, a durable push otherwise) - the receiver is always the
+  /// signal's own bound target, resolved server-side, never a
+  /// client-supplied value.
+  Future<PulseInteraction> sendSignal(String id) => _client.request(
+        'POST',
+        '/v1/pulse/signals/$id/send',
+        decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
+      );
 }
 
 class PulseBond {
@@ -192,6 +223,22 @@ class PulseBond {
   factory PulseBond.fromJson(Map<String, dynamic> json) => PulseBond(
         otherUserId: json['otherUserId'] as String,
         status: json['status'] as String,
+      );
+}
+
+class PulseSignal {
+  final String id;
+  final String targetUserId;
+  final String label;
+  final List<Map<String, dynamic>> segments;
+
+  PulseSignal({required this.id, required this.targetUserId, required this.label, required this.segments});
+
+  factory PulseSignal.fromJson(Map<String, dynamic> json) => PulseSignal(
+        id: json['id'] as String,
+        targetUserId: json['targetUserId'] as String,
+        label: json['label'] as String? ?? '',
+        segments: ((json['segments'] as List?) ?? []).map((e) => e as Map<String, dynamic>).toList(),
       );
 }
 

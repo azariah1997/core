@@ -126,9 +126,17 @@ func (s *Service) Start(ctx context.Context, presence Presence, callerID, id str
 		return Interaction{}, err
 	}
 	if deliveryMode == DeliveryLive {
-		s.publishPush(ctx, string(started.Type)+".started", started.ReceiverID, map[string]any{
+		data := map[string]any{
 			"interactionId": started.ID, "senderId": started.SenderID, "startedAt": now.Format(time.RFC3339Nano),
-		})
+		}
+		// A Custom Signal's whole point is "the pattern itself is the
+		// communication" (spec §20) - the receiver's device needs the
+		// actual segments the instant it arrives live to play them back
+		// locally; Pulse/Knock carry no comparable payload.
+		if started.Type == TypeSignal {
+			data["segments"] = started.Segments()
+		}
+		s.publishPush(ctx, string(started.Type)+".started", started.ReceiverID, data)
 	}
 	_ = s.analytics.Track(ctx, string(started.Type)+"_started", started.SenderID, map[string]any{
 		"interactionId": started.ID, "receiverId": started.ReceiverID, "deliveryMode": string(deliveryMode),
@@ -190,6 +198,15 @@ func notificationContent(i Interaction, durationMs int) (category, title, body s
 			pattern = *i.Pattern
 		}
 		return "knock_received", "Knock", "You received a Knock", map[string]any{"pattern": pattern}
+	case TypeSignal:
+		// A push notification can't trigger the receiver's app to play a
+		// custom haptic sequence while backgrounded (the same honest iOS/
+		// Android limitation already flagged for Live delivery elsewhere,
+		// see apps/pulse/docs/ARCHITECTURE_AUDIT.md's Risk #1) - this is a
+		// durable "you have a signal waiting" notice, not a played-back
+		// pattern; the real segments only ever reach the receiver's device
+		// while live (see Start's own publishPush).
+		return "signal_received", "Signal", "You received a Custom Signal", map[string]any{}
 	default:
 		return "pulse_received", "Pulse", "You received a Pulse", map[string]any{"durationMs": durationMs}
 	}
@@ -262,6 +279,40 @@ func (s *Service) Knock(ctx context.Context, core CoreRelationships, presence Pr
 	created, err := s.createInteraction(ctx, core, TypeKnock, callerID, CreateInput{
 		ReceiverID: in.ReceiverID,
 		Pattern:    string(pattern),
+	})
+	if err != nil {
+		return Interaction{}, err
+	}
+	if _, err := s.Start(ctx, presence, callerID, created.ID); err != nil {
+		return Interaction{}, err
+	}
+	return s.Stop(ctx, notifier, callerID, created.ID)
+}
+
+// SendSignal is spec §19-20's "the pattern itself is the communication" -
+// felt exactly like a Pulse or Knock (live if the receiver is connected,
+// durable push otherwise), reusing Create+Start+Stop against the same
+// shared state machine, typed TypeSignal, with the saved pattern's
+// segments carried through Pattern as JSON (see Interaction.Segments).
+// The platform never interprets what a pattern means (spec §20) - only
+// signalsSvc.Get's own ownership check (only the pattern's real owner
+// may ever send it) and createInteraction's own real-connection check
+// (identical to every other Type) gate delivery. The receiver is always
+// the signal's own bound target, never a client-supplied value - a
+// private pattern can't be redirected to someone it wasn't created for.
+func (s *Service) SendSignal(ctx context.Context, core CoreRelationships, presence Presence, notifier Notifier, signalsSvc Signals, callerID, signalID string) (Interaction, error) {
+	sig, err := signalsSvc.Get(ctx, callerID, signalID)
+	if err != nil {
+		return Interaction{}, err
+	}
+	segmentsJSON, err := json.Marshal(sig.Segments)
+	if err != nil {
+		return Interaction{}, err
+	}
+
+	created, err := s.createInteraction(ctx, core, TypeSignal, callerID, CreateInput{
+		ReceiverID: sig.TargetUserID,
+		Pattern:    string(segmentsJSON),
 	})
 	if err != nil {
 		return Interaction{}, err

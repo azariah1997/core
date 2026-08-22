@@ -471,6 +471,90 @@ func TestKnockDeliversAPushNotificationWhenReceiverIsOffline(t *testing.T) {
 	}
 }
 
+func TestSendSignalPropagatesASignalsLookupFailure(t *testing.T) {
+	svc := newService(&fakeRealtime{}, &fakeAnalytics{}, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+
+	sig := fakeSignals{err: pulseinteractions.ErrForbidden}
+	_, err := svc.SendSignal(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, sig, "caller-1", "signal-1")
+	if !errors.Is(err, pulseinteractions.ErrForbidden) {
+		t.Fatalf("expected the Signals lookup's own error (e.g. not the owner) to propagate, got %v", err)
+	}
+}
+
+func TestSendSignalRequiresAnExistingConnectionToTheSignalsRealTarget(t *testing.T) {
+	svc := newService(&fakeRealtime{}, &fakeAnalytics{}, true)
+	core := newFakeCoreRelationships() // no connection to "user-2" at all
+
+	sig := fakeSignals{ref: pulseinteractions.SignalRef{ID: "signal-1", TargetUserID: "user-2", Segments: []pulseinteractions.Segment{{Type: "tap", DurationMs: 150}}}}
+	_, err := svc.SendSignal(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, sig, "caller-1", "signal-1")
+	if !errors.Is(err, pulseinteractions.ErrNotConnected) {
+		t.Fatalf("expected ErrNotConnected, got %v", err)
+	}
+}
+
+func TestSendSignalCompletesInOneCallAndCarriesTheRealSegments(t *testing.T) {
+	realtime := &fakeRealtime{}
+	analytics := &fakeAnalytics{}
+	svc := newService(realtime, analytics, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+
+	segs := []pulseinteractions.Segment{{Type: "tap", DurationMs: 150}, {Type: "pause", DurationMs: 300}, {Type: "hold", DurationMs: 900}}
+	sig := fakeSignals{ref: pulseinteractions.SignalRef{ID: "signal-1", TargetUserID: "user-2", Segments: segs}}
+	sent, err := svc.SendSignal(context.Background(), core, fakePresence{online: true}, &fakeNotifier{}, sig, "caller-1", "signal-1")
+	if err != nil {
+		t.Fatalf("send signal: %v", err)
+	}
+	if sent.Type != pulseinteractions.TypeSignal {
+		t.Fatalf("expected TypeSignal, got %v", sent.Type)
+	}
+	if sent.Status != pulseinteractions.StatusCompleted {
+		t.Fatalf("expected SendSignal to complete the whole create+start+stop cycle in one call, got status %v", sent.Status)
+	}
+	if sent.ReceiverID != "user-2" {
+		t.Fatalf("expected the receiver to be the signal's own real bound target, got %v", sent.ReceiverID)
+	}
+	gotSegs := sent.Segments()
+	if len(gotSegs) != 3 || gotSegs[0].Type != "tap" || gotSegs[2].DurationMs != 900 {
+		t.Fatalf("expected the real segments to round-trip through Pattern, got %+v", gotSegs)
+	}
+
+	analytics.mu.Lock()
+	defer analytics.mu.Unlock()
+	found := false
+	for _, track := range analytics.tracks {
+		if track == "signal_completed:caller-1" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a signal_completed analytics event, got %v", analytics.tracks)
+	}
+}
+
+func TestSendSignalDeliversAPushNotificationWhenReceiverIsOffline(t *testing.T) {
+	svc := newService(&fakeRealtime{}, &fakeAnalytics{}, true)
+	core := newFakeCoreRelationships()
+	core.connect(pulseinteractions.FriendRelationshipType, "user-2", "active")
+
+	sig := fakeSignals{ref: pulseinteractions.SignalRef{ID: "signal-1", TargetUserID: "user-2", Segments: []pulseinteractions.Segment{{Type: "tap", DurationMs: 150}}}}
+	notifier := &fakeNotifier{}
+	sent, err := svc.SendSignal(context.Background(), core, fakePresence{online: false}, notifier, sig, "caller-1", "signal-1")
+	if err != nil {
+		t.Fatalf("send signal: %v", err)
+	}
+	if sent.DeliveryMode != pulseinteractions.DeliveryPush {
+		t.Fatalf("expected DeliveryPush for an offline receiver, got %v", sent.DeliveryMode)
+	}
+	notifier.mu.Lock()
+	defer notifier.mu.Unlock()
+	if len(notifier.sent) != 1 || notifier.sent[0] != "user-2" {
+		t.Fatalf("expected exactly one push notification to user-2, got %v", notifier.sent)
+	}
+}
+
 // completePulse drives a full Create+Start+Stop cycle - the setup every
 // PulseBack test needs, since you can only respond to a completed Pulse.
 func completePulse(svc *pulseinteractions.Service, core *fakeCoreRelationships, senderID, receiverID string) (pulseinteractions.Interaction, error) {

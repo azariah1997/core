@@ -11,6 +11,7 @@ package pulseinteractions
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -26,8 +27,9 @@ type Type string
 // "extensible architecture" Phase 7 was explicitly asked to leave
 // behind for Phase 11's custom signals.
 const (
-	TypePulse Type = "pulse"
-	TypeKnock Type = "knock"
+	TypePulse  Type = "pulse"
+	TypeKnock  Type = "knock"
+	TypeSignal Type = "signal"
 )
 
 type Status string
@@ -74,16 +76,31 @@ type Interaction struct {
 	// InResponseToID links a Pulse Back (spec §17) to the original
 	// interaction it's reciprocating - nil for an ordinary Pulse.
 	InResponseToID *string
-	// Pattern is only meaningful for TypeKnock this phase - a name from
-	// a small predefined set (spec §18), not yet the free-form
-	// tap/hold/pause segment array Phase 11's Custom Signals will add.
-	// A plain nullable string, not KnockPattern, so this same field can
-	// hold whatever later phases need without another migration.
+	// Pattern is a name from a small predefined set for TypeKnock (spec
+	// §18), or a JSON-encoded []Segment for TypeSignal (spec §19-20,
+	// Phase 11) - a plain nullable string, not a typed column, so this
+	// one field holds whatever a given Type needs without another
+	// migration (exactly the reuse this comment anticipated when Knock
+	// was the only Type using it).
 	Pattern      *string
 	DeliveryMode DeliveryMode
 	Status       Status
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
+}
+
+// Segments decodes Pattern as a []Segment - only meaningful (and only
+// ever called) for TypeSignal; a malformed or absent Pattern yields an
+// empty slice rather than an error, since nothing here should ever
+// panic or fail a read over a formatting detail of a field only this
+// package writes.
+func (i Interaction) Segments() []Segment {
+	if i.Pattern == nil {
+		return nil
+	}
+	var segs []Segment
+	_ = json.Unmarshal([]byte(*i.Pattern), &segs)
+	return segs
 }
 
 func (i Interaction) otherUser(callerID string) string {
@@ -216,9 +233,10 @@ func (in CreateInput) Validate() error {
 }
 
 // KnockPattern is a name from the small predefined set spec §18 names
-// (••, •••, — •, • — •) - not yet the free-form segment array Phase
-// 11's Custom Signals will add, but a plain string field on Interaction
-// (not this type) so that later addition needs no new column.
+// (••, •••, — •, • — •) - the small closed vocabulary every Knock
+// chooses from, distinct from Custom Signals' free-form segment array
+// below (spec §19-20), which any two connected users can compose
+// themselves.
 type KnockPattern string
 
 const (
@@ -241,4 +259,34 @@ type KnockInput struct {
 	ReceiverID string
 	// Pattern defaults to KnockPatternDoubleTap when empty.
 	Pattern KnockPattern
+}
+
+// Segment mirrors signals.Segment, narrowed to what pulse-interactions
+// needs to relay - duplicated rather than imported (this codebase's
+// consumer-defined-interface convention). The platform never interprets
+// these beyond faithfully delivering them to the receiver's device for
+// local haptic playback (spec §20: "do not interpret custom semantics
+// server-side").
+type Segment struct {
+	Type       string `json:"type"`
+	DurationMs int    `json:"durationMs"`
+}
+
+// SignalRef is signals' own Signal, narrowed to what SendSignal needs.
+type SignalRef struct {
+	ID           string
+	TargetUserID string
+	Segments     []Segment
+}
+
+// Signals resolves the caller's own saved pattern by ID - satisfied
+// directly by signals' real *Service.Get (identical shape, no adapter
+// needed beyond the type translation in
+// internal/pulseinteractions/pulsemodules, matching this codebase's
+// "satisfied directly by *authz.Service" precedent for same-process
+// dependencies). signals.Service.Get already enforces that only the
+// pattern's real owner may resolve it - SendSignal never re-checks
+// ownership itself.
+type Signals interface {
+	Get(ctx context.Context, callerID, signalID string) (SignalRef, error)
 }

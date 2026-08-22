@@ -268,6 +268,21 @@ class _HomeShellState extends State<HomeShell> {
           });
         }
         break;
+      // Custom Signals (spec §19-20, Phase 11): "the pattern itself is
+      // the communication" - the server never assigns meaning, and
+      // neither does this handler; it just plays back whatever segments
+      // arrived, exactly once, with no response action (unlike Pulse's
+      // own banner) since a private pattern's whole point is felt, not
+      // replied to with another gesture.
+      case 'signal.started':
+        final data = m.data;
+        final segments = data is Map ? data['segments'] as List<dynamic>? : null;
+        if (segments != null) _haptics.playSegments(segments);
+        setState(() => _incomingBanner = 'Someone sent you a Signal 💌');
+        Future.delayed(const Duration(seconds: 4), () {
+          if (mounted) setState(() => _incomingBanner = null);
+        });
+        break;
     }
   }
 
@@ -676,6 +691,16 @@ class _HomeTabState extends State<_HomeTab> {
             onPressed: _holding ? null : _sendKnock,
             child: const Text('Knock'),
           ),
+          const SizedBox(height: 8),
+          OutlinedButton(
+            key: const Key('signalsButton'),
+            onPressed: _holding
+                ? null
+                : () => Navigator.of(context).push(MaterialPageRoute(
+                      builder: (_) => SignalsScreen(pulseApi: widget.pulseApi, haptics: widget.haptics, targetUserId: target.otherUserId),
+                    )),
+            child: const Text('Signals'),
+          ),
           if (widget.bondPartnerId != null && target.otherUserId == widget.bondPartnerId) ...[
             const SizedBox(height: 8),
             FilledButton.tonal(
@@ -829,6 +854,167 @@ class _LiveTouchScreenState extends State<LiveTouchScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Custom Signals (product spec §19-20, Phase 11): a private touch
+/// pattern library bound to exactly one specific connection - "the same
+/// pattern means something different to different pairs, so it only
+/// ever means one thing." Composed here from tap/hold/pause segments,
+/// previewable locally before saving (the server never interprets what
+/// a pattern means, spec §20 - only this screen, and only for its own
+/// creator, ever "reads" one).
+class SignalsScreen extends StatefulWidget {
+  final PulseApi pulseApi;
+  final HapticEngine haptics;
+  final String targetUserId;
+  const SignalsScreen({super.key, required this.pulseApi, required this.haptics, required this.targetUserId});
+
+  @override
+  State<SignalsScreen> createState() => _SignalsScreenState();
+}
+
+class _SignalsScreenState extends State<SignalsScreen> {
+  List<PulseSignal> _signals = [];
+  bool _loading = true;
+  String? _error;
+  String? _status;
+
+  final _labelController = TextEditingController();
+  final List<Map<String, dynamic>> _composing = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final all = await widget.pulseApi.listSignals();
+      final mine = all.where((s) => s.targetUserId == widget.targetUserId).toList();
+      if (mounted) setState(() => _signals = mine);
+    } catch (err) {
+      if (mounted) setState(() => _error = '$err');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _addSegment(String type, int durationMs) {
+    setState(() => _composing.add({'type': type, 'durationMs': durationMs}));
+  }
+
+  void _clearComposing() {
+    setState(() {
+      _composing.clear();
+      _labelController.clear();
+    });
+  }
+
+  Future<void> _preview() => widget.haptics.playSegments(_composing);
+
+  Future<void> _save() async {
+    if (_composing.isEmpty) return;
+    try {
+      final sig = await widget.pulseApi.createSignal(widget.targetUserId, _labelController.text.trim(), List.of(_composing));
+      setState(() {
+        _signals = [..._signals, sig];
+        _status = 'Signal saved';
+      });
+      _clearComposing();
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  Future<void> _send(PulseSignal sig) async {
+    try {
+      await widget.pulseApi.sendSignal(sig.id);
+      setState(() => _status = 'Sent "${sig.label.isEmpty ? 'Signal' : sig.label}"');
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  Future<void> _delete(PulseSignal sig) async {
+    try {
+      await widget.pulseApi.deleteSignal(sig.id);
+      setState(() => _signals = _signals.where((s) => s.id != sig.id).toList());
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  @override
+  void dispose() {
+    _labelController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return Scaffold(appBar: AppBar(title: const Text('Signals')), body: const Center(child: CircularProgressIndicator()));
+    }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Signals')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text('A private touch pattern only the two of you understand.', style: Theme.of(context).textTheme.bodySmall),
+          const SizedBox(height: 16),
+          if (_signals.isEmpty) const Text('No signals yet for this connection.'),
+          for (final sig in _signals)
+            Card(
+              child: ListTile(
+                title: Text(sig.label.isEmpty ? '(no label)' : sig.label),
+                subtitle: Text('${sig.segments.length} segments'),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(key: const Key('sendSignalButton'), icon: const Icon(Icons.send), onPressed: () => _send(sig)),
+                    IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _delete(sig)),
+                  ],
+                ),
+              ),
+            ),
+          const Divider(height: 32),
+          Text('Compose a new pattern', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          TextField(controller: _labelController, decoration: const InputDecoration(labelText: 'Label (only you see this)')),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton(key: const Key('addTapButton'), onPressed: () => _addSegment('tap', 150), child: const Text('+ Tap')),
+              OutlinedButton(key: const Key('addHoldButton'), onPressed: () => _addSegment('hold', 900), child: const Text('+ Hold')),
+              OutlinedButton(key: const Key('addPauseButton'), onPressed: () => _addSegment('pause', 300), child: const Text('+ Pause')),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(_composing.isEmpty ? 'No segments yet' : _composing.map((s) => s['type']).join(' → ')),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              OutlinedButton(onPressed: _composing.isEmpty ? null : _preview, child: const Text('Preview')),
+              const SizedBox(width: 8),
+              FilledButton(key: const Key('saveSignalButton'), onPressed: _composing.isEmpty ? null : _save, child: const Text('Save')),
+              const SizedBox(width: 8),
+              TextButton(onPressed: _composing.isEmpty ? null : _clearComposing, child: const Text('Clear')),
+            ],
+          ),
+          if (_status != null) ...[
+            const SizedBox(height: 12),
+            Text(_status!, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+          ],
+          if (_error != null) ...[
+            const SizedBox(height: 12),
+            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+        ],
       ),
     );
   }

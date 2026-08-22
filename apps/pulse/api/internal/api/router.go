@@ -18,7 +18,10 @@ import (
 	pulseconnectionscore "github.com/example/core-platform/apps/pulse/api/internal/pulseconnections/core"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions"
 	pulseinteractionscore "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/core"
+	pulseinteractionspulsemodules "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/pulsemodules"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseprofile"
+	"github.com/example/core-platform/apps/pulse/api/internal/signals"
+	signalscore "github.com/example/core-platform/apps/pulse/api/internal/signals/core"
 	"github.com/example/core-platform/packages/go/coresdk"
 	"github.com/example/core-platform/packages/go/platformkit/correlation"
 	"github.com/example/core-platform/packages/go/platformkit/health"
@@ -41,7 +44,7 @@ type Config struct {
 	PulseAppID string
 }
 
-func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, connectionsSvc *pulseconnections.Service, bondSvc *bond.Service, interactionsSvc *pulseinteractions.Service, moodSvc *mood.Service, liveTouchSvc *livetouch.Service) http.Handler {
+func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, connectionsSvc *pulseconnections.Service, bondSvc *bond.Service, interactionsSvc *pulseinteractions.Service, moodSvc *mood.Service, liveTouchSvc *livetouch.Service, signalsSvc *signals.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	checks := func(ctx context.Context) []health.Result {
@@ -78,7 +81,13 @@ func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, conne
 	newNotifier := func(client *coresdk.Client) pulseinteractions.Notifier {
 		return pulseinteractionscore.NewNotifierAdapter(client, cfg.PulseAppID)
 	}
-	pulseinteractions.RegisterRoutes(mux, interactionsSvc, newInteractionsCore, newPresence, newNotifier, requireUser)
+	pulseinteractions.RegisterRoutes(mux, interactionsSvc, newInteractionsCore, newPresence, newNotifier,
+		pulseinteractionspulsemodules.NewSignalsAdapter(signalsSvc), requireUser)
+
+	newSignalsCore := func(client *coresdk.Client) signals.CoreRelationships {
+		return signalscore.NewRelationshipsAdapter(client, cfg.PulseAppID)
+	}
+	signals.RegisterRoutes(mux, signalsSvc, newSignalsCore, requireUser)
 
 	newMoodConnections := func(client *coresdk.Client) mood.Connections {
 		return pulsemodules.NewConnectionsAdapter(connectionsSvc, newConnectionsCore(client))

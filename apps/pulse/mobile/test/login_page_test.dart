@@ -19,6 +19,8 @@ http.Client _fakeBackend({bool failLogin = false}) {
   String? moodEmoji;
   final circles = <Map<String, dynamic>>[];
   final circleMembers = <String, List<String>>{};
+  final signalsList = <Map<String, dynamic>>[];
+  final signalsSent = <String>[];
   return MockClient((req) async {
     if (req.url.path.contains('/protocol/openid-connect/token')) {
       if (failLogin) {
@@ -102,6 +104,24 @@ http.Client _fakeBackend({bool failLogin = false}) {
     if (req.url.path == '/v1/pulse/live-touch/sessions') {
       return http.Response(
         jsonEncode({'id': 'session-1', 'otherUserId': 'user-2friend', 'role': 'initiator', 'status': 'invited', 'deliveryMode': 'push', 'invitedAt': '2026-01-01T00:00:00.000Z'}),
+        201,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.method == 'POST' && req.url.path == '/v1/pulse/signals') {
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      final sig = {'id': 'signal-${signalsList.length + 1}', 'targetUserId': body['targetUserId'], 'label': body['label'], 'segments': body['segments'], 'createdAt': '2026-01-01T00:00:00.000Z'};
+      signalsList.add(sig);
+      return http.Response(jsonEncode(sig), 201, headers: {'content-type': 'application/json'});
+    }
+    if (req.method == 'GET' && req.url.path == '/v1/pulse/signals') {
+      return http.Response(jsonEncode({'items': signalsList}), 200, headers: {'content-type': 'application/json'});
+    }
+    final sendSignalMatch = RegExp(r'^/v1/pulse/signals/([^/]+)/send$').firstMatch(req.url.path);
+    if (sendSignalMatch != null && req.method == 'POST') {
+      signalsSent.add(sendSignalMatch.group(1)!);
+      return http.Response(
+        jsonEncode({'id': 'interaction-signal-1', 'type': 'signal', 'otherUserId': 'user-2friend', 'role': 'sender', 'status': 'completed', 'deliveryMode': 'push', 'createdAt': '2026-01-01T00:00:00.000Z'}),
         201,
         headers: {'content-type': 'application/json'},
       );
@@ -313,6 +333,34 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Waiting for partner…'), findsOneWidget);
+  });
+
+  testWidgets('composing, saving, and sending a Custom Signal round-trips through the real pulse-api chain', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('signalsButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No signals yet for this connection.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('addTapButton')));
+    await tester.tap(find.byKey(const Key('addPauseButton')));
+    await tester.tap(find.byKey(const Key('addHoldButton')));
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'I love you');
+    await tester.tap(find.byKey(const Key('saveSignalButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Signal saved'), findsOneWidget);
+    expect(find.text('I love you'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('sendSignalButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Sent "I love you"'), findsOneWidget);
   });
 
   testWidgets('the Profile tab round-trips through the real pulse-api chain', (tester) async {

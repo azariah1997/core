@@ -21,6 +21,16 @@ abstract class HapticEngine {
   Future<void> playPulseStop();
   Future<void> playKnock();
 
+  /// Custom Signals (product spec §19-20, Phase 11) - "the pattern
+  /// itself is the communication," so playback is purely local
+  /// interpretation of whatever tap/hold/pause segments arrived (or are
+  /// being composed): the platform server never assigns them meaning,
+  /// and neither does this method - it just plays them back in order.
+  /// segments is a plain list of {'type': 'tap'|'hold'|'pause',
+  /// 'durationMs': int} maps, matching the wire format directly (no
+  /// typed dependency on pulse_api.dart's own models).
+  Future<void> playSegments(List<dynamic> segments);
+
   factory HapticEngine.detect() {
     if (kIsWeb) return UnavailableHapticEngine();
     return StandardHapticEngine();
@@ -39,6 +49,25 @@ class StandardHapticEngine implements HapticEngine {
 
   @override
   Future<void> playKnock() => HapticFeedback.selectionClick();
+
+  @override
+  Future<void> playSegments(List<dynamic> segments) async {
+    for (final seg in segments) {
+      final type = seg is Map ? seg['type'] as String? : null;
+      final durationMs = seg is Map ? (seg['durationMs'] as num?)?.toInt() ?? 0 : 0;
+      switch (type) {
+        case 'tap':
+          await HapticFeedback.selectionClick();
+          break;
+        case 'hold':
+          await HapticFeedback.heavyImpact();
+          break;
+        case 'pause':
+          break;
+      }
+      await Future.delayed(Duration(milliseconds: durationMs));
+    }
+  }
 }
 
 /// Used on web and any platform HapticFeedback has nothing real to do
@@ -52,4 +81,6 @@ class UnavailableHapticEngine implements HapticEngine {
   Future<void> playPulseStop() async {}
   @override
   Future<void> playKnock() async {}
+  @override
+  Future<void> playSegments(List<dynamic> segments) async {}
 }

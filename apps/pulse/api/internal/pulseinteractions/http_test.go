@@ -1,6 +1,7 @@
 package pulseinteractions_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -86,11 +87,23 @@ func newNotifierFactory(pulseAppID string) pulseinteractions.NotifierFactory {
 	}
 }
 
+// fakeSignals is unused by every test in this file except SendSignal's
+// own (see http_test.go's dedicated signal tests below) - a fixed,
+// service-level dependency, same as the real signals.Service would be.
+type fakeSignals struct {
+	ref pulseinteractions.SignalRef
+	err error
+}
+
+func (f fakeSignals) Get(ctx context.Context, callerID, signalID string) (pulseinteractions.SignalRef, error) {
+	return f.ref, f.err
+}
+
 func TestCreateHandlerRejectsWithoutAConnection(t *testing.T) {
 	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
 	server, _ := newFakeCoreServer(t, "pulse_friend", "", true)
 	mux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("caller-1", server.URL))
 
 	req := httptest.NewRequest("POST", "/v1/pulse/interactions", strings.NewReader(`{"type":"pulse","receiverId":"user-2"}`))
 	rr := httptest.NewRecorder()
@@ -105,7 +118,7 @@ func TestFullLivePulseLifecycleThroughTheRealRouterAndAFakeCoreServer(t *testing
 	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
 	server, fakeCore := newFakeCoreServer(t, "pulse_friend", "active", true) // receiver online
 	mux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("caller-1", server.URL))
 
 	createReq := httptest.NewRequest("POST", "/v1/pulse/interactions", strings.NewReader(`{"type":"pulse","receiverId":"user-2"}`))
 	createRR := httptest.NewRecorder()
@@ -160,7 +173,7 @@ func TestOfflineReceiverGetsAPushNotificationThroughTheRealRouter(t *testing.T) 
 	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
 	server, fakeCore := newFakeCoreServer(t, "pulse_friend", "active", false) // receiver offline
 	mux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("caller-1", server.URL))
 
 	createRR := httptest.NewRecorder()
 	mux.ServeHTTP(createRR, httptest.NewRequest("POST", "/v1/pulse/interactions", strings.NewReader(`{"type":"pulse","receiverId":"user-2"}`)))
@@ -193,7 +206,7 @@ func TestPulseBackHandlerRoundTripsThroughTheRealRouter(t *testing.T) {
 	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)
 
 	senderMux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(senderMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	pulseinteractions.RegisterRoutes(senderMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("caller-1", server.URL))
 
 	createRR := httptest.NewRecorder()
 	senderMux.ServeHTTP(createRR, httptest.NewRequest("POST", "/v1/pulse/interactions", strings.NewReader(`{"type":"pulse","receiverId":"user-2"}`)))
@@ -210,7 +223,7 @@ func TestPulseBackHandlerRoundTripsThroughTheRealRouter(t *testing.T) {
 
 	// user-2 (the real receiver) Pulses Back - one API call.
 	receiverMux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(receiverMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("user-2", server.URL))
+	pulseinteractions.RegisterRoutes(receiverMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("user-2", server.URL))
 
 	backRR := httptest.NewRecorder()
 	receiverMux.ServeHTTP(backRR, httptest.NewRequest("POST", "/v1/pulse/interactions/"+original.ID+"/pulse-back", nil))
@@ -240,7 +253,7 @@ func TestPulseBackRejectsAnIncompleteOriginalThroughTheRealRouter(t *testing.T) 
 	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)
 
 	senderMux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(senderMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	pulseinteractions.RegisterRoutes(senderMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("caller-1", server.URL))
 	createRR := httptest.NewRecorder()
 	senderMux.ServeHTTP(createRR, httptest.NewRequest("POST", "/v1/pulse/interactions", strings.NewReader(`{"type":"pulse","receiverId":"user-2"}`)))
 	var created struct {
@@ -252,7 +265,7 @@ func TestPulseBackRejectsAnIncompleteOriginalThroughTheRealRouter(t *testing.T) 
 	// The real receiver (user-2) tries to Pulse Back on an interaction
 	// that never actually completed.
 	receiverMux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(receiverMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("user-2", server.URL))
+	pulseinteractions.RegisterRoutes(receiverMux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("user-2", server.URL))
 	rr := httptest.NewRecorder()
 	receiverMux.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/pulse/interactions/"+created.ID+"/pulse-back", nil))
 	if rr.Code != http.StatusConflict {
@@ -264,7 +277,7 @@ func TestKnockHandlerRoundTripsThroughTheRealRouter(t *testing.T) {
 	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
 	server, fakeCore := newFakeCoreServer(t, "pulse_friend", "active", false) // receiver offline
 	mux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("caller-1", server.URL))
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/pulse/knocks", strings.NewReader(`{"receiverId":"user-2","pattern":"triple_tap"}`)))
@@ -289,11 +302,47 @@ func TestKnockHandlerRoundTripsThroughTheRealRouter(t *testing.T) {
 	}
 }
 
+func TestSendSignalHandlerRoundTripsThroughTheRealRouter(t *testing.T) {
+	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
+	server, fakeCore := newFakeCoreServer(t, "pulse_friend", "active", false) // receiver offline
+	sig := fakeSignals{ref: pulseinteractions.SignalRef{
+		ID: "signal-1", TargetUserID: "user-2",
+		Segments: []pulseinteractions.Segment{{Type: "tap", DurationMs: 150}, {Type: "hold", DurationMs: 900}},
+	}}
+	mux := http.NewServeMux()
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), sig, fixedCallerWithCore("caller-1", server.URL))
+
+	rr := httptest.NewRecorder()
+	mux.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/pulse/signals/signal-1/send", nil))
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var sent struct {
+		Type        string `json:"type"`
+		Status      string `json:"status"`
+		OtherUserID string `json:"otherUserId"`
+		Segments    []struct {
+			Type       string `json:"type"`
+			DurationMs int    `json:"durationMs"`
+		} `json:"segments"`
+	}
+	json.Unmarshal(rr.Body.Bytes(), &sent)
+	if sent.Type != "signal" || sent.Status != "completed" || sent.OtherUserID != "user-2" || len(sent.Segments) != 2 {
+		t.Fatalf("expected a completed signal send to the real bound target with its real segments, got %+v", sent)
+	}
+
+	fakeCore.mu.Lock()
+	defer fakeCore.mu.Unlock()
+	if len(fakeCore.notificationsSent) != 1 || fakeCore.notificationsSent[0] != "user-2" {
+		t.Fatalf("expected exactly one push notification to user-2, got %v", fakeCore.notificationsSent)
+	}
+}
+
 func TestKnockHandlerRejectsAnInvalidPattern(t *testing.T) {
 	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
 	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)
 	mux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("caller-1", server.URL))
 
 	rr := httptest.NewRecorder()
 	mux.ServeHTTP(rr, httptest.NewRequest("POST", "/v1/pulse/knocks", strings.NewReader(`{"receiverId":"user-2","pattern":"not_a_real_pattern"}`)))
@@ -306,7 +355,7 @@ func TestStopBeforeStartReturnsConflict(t *testing.T) {
 	svc := pulseinteractions.NewService(memory.New(), &fakeRealtime{}, &fakeAnalytics{}, fakeRateLimiter{allow: true})
 	server, _ := newFakeCoreServer(t, "pulse_friend", "active", true)
 	mux := http.NewServeMux()
-	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fixedCallerWithCore("caller-1", server.URL))
+	pulseinteractions.RegisterRoutes(mux, svc, newCoreFactory("app-1"), newPresenceFactory(server.URL), newNotifierFactory("app-1"), fakeSignals{}, fixedCallerWithCore("caller-1", server.URL))
 
 	createRR := httptest.NewRecorder()
 	mux.ServeHTTP(createRR, httptest.NewRequest("POST", "/v1/pulse/interactions", strings.NewReader(`{"type":"pulse","receiverId":"user-2"}`)))

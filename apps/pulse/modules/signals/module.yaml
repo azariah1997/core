@@ -1,6 +1,5 @@
 name: signals
 owner: pulse
-lifecycle: planned
+lifecycle: experimental
 dependencies:
-  - pulse-connections
-  - bond
+  - core:relationships

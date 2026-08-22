@@ -199,8 +199,8 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">11 / 18</div><div class="label">Phases complete (Audit → Live Touch)</div></div>
-    <div class="stat-pill"><div class="num">6 / 10</div><div class="label">Pulse domain modules live</div></div>
+    <div class="stat-pill"><div class="num">12 / 18</div><div class="label">Phases complete (Audit → Custom Touch Language)</div></div>
+    <div class="stat-pill"><div class="num">7 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
     <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
@@ -468,7 +468,7 @@ Core Platform</pre>
   <p class="hint">Full detail in <code>apps/pulse/docs/ARCHITECTURE_AUDIT.md</code>. Every row below was verified against real Core Platform source in this repository — nothing here was assumed from a module name.</p>
 
   <div class="card">
-    <h3>Pulse-owned domain modules (6 of 10 live)</h3>
+    <h3>Pulse-owned domain modules (7 of 10 live)</h3>
     <table>
       <thead><tr><th>Module</th><th>Owns</th><th>Depends on</th><th>Phase</th></tr></thead>
       <tbody>
@@ -478,7 +478,7 @@ Core Platform</pre>
         <tr><td><code>pulse-interactions</code> <span class="badge done">Done (live path)</span></td><td>Pulse/Knock/MoodResponse state machine</td><td>relationships, rtbus, analytics, ratelimit</td><td>4-7</td></tr>
         <tr><td><code>mood</code> <span class="badge done">Done</span></td><td>Today's Mood, audience, expiry</td><td>pulse-connections, bond</td><td>8</td></tr>
         <tr><td><code>live-touch</code> <span class="badge done">Done</span></td><td>Synchronous touch session lifecycle</td><td>bond</td><td>10</td></tr>
-        <tr><td><code>signals</code></td><td>Custom touch-pattern storage</td><td>pulse-connections, bond</td><td>11</td></tr>
+        <tr><td><code>signals</code> <span class="badge done">Done</span></td><td>Custom touch-pattern storage</td><td>Core relationships</td><td>11</td></tr>
         <tr><td><code>moments</code></td><td>Saved-highlights timeline (references only, no chat)</td><td>pulse-interactions</td><td>12</td></tr>
         <tr><td><code>pulse-preferences</code></td><td>Notification detail level, mute</td><td>Core <code>notifications</code></td><td>13</td></tr>
         <tr><td><code>pulse-entitlements</code></td><td><code>pulse.plus</code> feature gating</td><td>Core <code>billing</code></td><td>16</td></tr>
@@ -661,7 +661,7 @@ PUT    /v1/pulse/preferences</pre>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond acceptance - only the target may accept, mirroring Core's own relationships semantics</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>One-active-Bond policy - real Postgres unique-constraint enforcement, live-proven under genuine concurrency</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond ending - frees the active-holder slot for a new bond</li>
-      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond-specific permissions - Live Touch gating landed in Phase 10 (<code>bond.MyActiveBond</code> reused directly); private touch language gating is Phase 11's job</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond-specific permissions - Live Touch gating landed in Phase 10 (<code>bond.MyActiveBond</code> reused directly). Custom Signals (Phase 11) turned out not to need Bond specifically - the module scaffold's "relationship-scoped, not global" meant scoped to one specific connection (Friend-or-Bond, the same model Pulse/Knock already use), not Bond-only</li>
     </ul>
   </div>
 
@@ -712,7 +712,7 @@ PUT    /v1/pulse/preferences</pre>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>One-call Create+Start+Stop, reusing the exact authorization/rate-limit/presence logic Pulse and Pulse Back already established</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Four predefined patterns, server-validated, defaulting to double_tap</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div><code>Notifier</code> generalized to one method shared by every interaction type, not one per type</li>
-      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Realtime event names and analytics event names derived from <code>Type</code>, not hardcoded - the extensibility Phase 11 needs</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Realtime event names and analytics event names derived from <code>Type</code>, not hardcoded - the extensibility Phase 11's Custom Signals built on</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mobile "Knock" button plus incoming-Knock haptic and banner, wired to the real API</li>
     </ul>
   </div>
@@ -756,9 +756,17 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">11</span>Custom Touch Language <span class="badge pending">Pending</span></h3>
-    <p>Signal pattern creation, bounded (no malicious infinite/very-long vibration patterns).</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">11</span>Custom Touch Language <span class="badge done">Done</span></h3>
+    <p><code>POST/GET /v1/pulse/signals</code>, <code>GET/DELETE .../{id}</code>, <code>POST .../{id}/send</code> - a private touch pattern library (new <code>signals</code> module) plus a fourth pulse-interactions Type (<code>TypeSignal</code>) for actually sending one, the same Create+Start+Stop reuse Knock established in Phase 7. A Signal send gets every real guarantee Pulse/Knock already have (connection check, rate limit, live-vs-push delivery) for free. Segments (tap/hold/pause + durationMs) travel through the existing nullable <code>pattern</code> column as JSON - a Phase-7-era comment on that field explicitly anticipated this reuse, so this phase needed no new migration on <code>interactions</code> at all. Server-enforced bounds (max 20 segments, 20-3000ms each, 10000ms total) close Risk #4 below - enforced at creation time, never merely a client-side UI limit. Only a pattern's real owner may ever resolve or send it (<code>signals.Service.Get</code>'s own ownership check is pulse-interactions' entire authorization surface for sending); the receiver is always the signal's own bound target, never a client-supplied value - a private pattern can never be redirected to someone it wasn't created for. Live-validated end to end with the Phase 9/10 sample connections (Alice → Bob): creating a real pattern, a real 403 rejecting a stranger's read, real bounds rejecting an oversized segment count and an out-of-range duration, a real push-fallback notification landing in Core's database, and a real WebSocket round trip confirming the receiver's device gets the actual segments array live for local haptic playback - "the pattern itself is the communication" (spec §20). Mobile ships a real Signals screen per connection: compose with local haptic preview, save, send, delete.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Private pattern library bound to one specific connection, never a global reusable pattern</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Server-enforced bounds at creation time - segment count, per-segment and total duration</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Sending reuses pulse-interactions' Create+Start+Stop as a fourth Type - no duplicated authorization/rate-limit/delivery logic</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Ownership-only send authorization; receiver always the signal's own bound target</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Live delivery carries the real segments array for local haptic playback</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mobile: compose (with local preview), save, send, delete, per connection</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">
@@ -853,7 +861,7 @@ PUT    /v1/pulse/preferences</pre>
 
   <div class="card"><span class="risk-num">3</span><b>Trusting client-submitted duration.</b> Server timestamps are truth; client <code>startedAt</code>/<code>endedAt</code> are UX-only. A test asserting a forged large <code>durationMs</code> is ignored in favor of server-observed timing should exist before Phase 4 is called done.</div>
 
-  <div class="card"><span class="risk-num">4</span><b>Custom signal pattern abuse.</b> An unbounded <code>segments[]</code> array could construct a very long or rapid vibration pattern. Needs explicit server-side bounds (max segment count, max total duration) at creation time, not just client-side UI limits.</div>
+  <div class="card"><span class="risk-num">4</span><b>Custom signal pattern abuse.</b> An unbounded <code>segments[]</code> array could construct a very long or rapid vibration pattern. Mitigated in Phase 11: explicit server-side bounds (max 20 segments, 20-3000ms each, 10000ms total) enforced at creation time in <code>signals.CreateInput.Validate</code>, never merely a client-side UI limit - live-confirmed rejecting both an oversized segment count and an out-of-range single-segment duration.</div>
 
   <div class="card"><span class="risk-num">5</span><b>Deep-link / invite-link growth loop intersects Trust &amp; Safety.</b> An open invite-link flow is a natural spam vector — must reuse trustsafety's rate limiting on invite creation, not just on Pulse/Knock sending.</div>
 

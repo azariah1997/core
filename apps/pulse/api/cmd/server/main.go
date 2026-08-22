@@ -26,6 +26,8 @@ import (
 	pulseinteractionspg "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/postgres"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseprofile"
 	pulseprofilepg "github.com/example/core-platform/apps/pulse/api/internal/pulseprofile/postgres"
+	"github.com/example/core-platform/apps/pulse/api/internal/signals"
+	signalspg "github.com/example/core-platform/apps/pulse/api/internal/signals/postgres"
 	"github.com/example/core-platform/packages/go/platformkit/config"
 	"github.com/example/core-platform/packages/go/platformkit/logging"
 	"github.com/example/core-platform/packages/go/platformkit/metrics"
@@ -110,7 +112,9 @@ func main() {
 	liveTouchAnalytics := livetouchcore.NewAnalyticsAdapter(cfg.CoreAPIURL, cfg.PulseAppID)
 	liveTouchSvc := livetouch.NewService(livetouchpg.New(pool), livetouchpulsemodules.NewBondAdapter(bondSvc), liveTouchRealtime, liveTouchAnalytics, ratelimit.New(redisClient))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc, liveTouchSvc))
+	signalsSvc := signals.NewService(signalspg.New(pool))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc, liveTouchSvc, signalsSvc))
 
 	addr := env("PULSE_HTTP_ADDR", ":8096")
 	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}
