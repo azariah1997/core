@@ -21,6 +21,9 @@ import (
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions"
 	pulseinteractionscore "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/core"
 	pulseinteractionspulsemodules "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/pulsemodules"
+	"github.com/example/core-platform/apps/pulse/api/internal/pulseprefs"
+	pulseprefscore "github.com/example/core-platform/apps/pulse/api/internal/pulseprefs/core"
+	pulseprefspulsemodules "github.com/example/core-platform/apps/pulse/api/internal/pulseprefs/pulsemodules"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseprofile"
 	"github.com/example/core-platform/apps/pulse/api/internal/signals"
 	signalscore "github.com/example/core-platform/apps/pulse/api/internal/signals/core"
@@ -46,7 +49,7 @@ type Config struct {
 	PulseAppID string
 }
 
-func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, connectionsSvc *pulseconnections.Service, bondSvc *bond.Service, interactionsSvc *pulseinteractions.Service, moodSvc *mood.Service, liveTouchSvc *livetouch.Service, signalsSvc *signals.Service, momentsSvc *moments.Service) http.Handler {
+func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, connectionsSvc *pulseconnections.Service, bondSvc *bond.Service, interactionsSvc *pulseinteractions.Service, moodSvc *mood.Service, liveTouchSvc *livetouch.Service, signalsSvc *signals.Service, momentsSvc *moments.Service, prefsSvc *pulseprefs.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	checks := func(ctx context.Context) []health.Result {
@@ -81,7 +84,7 @@ func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, conne
 		return pulseinteractionscore.NewPresenceAdapter(cfg.RealtimeAPIURL, token)
 	}
 	newNotifier := func(client *coresdk.Client) pulseinteractions.Notifier {
-		return pulseinteractionscore.NewNotifierAdapter(client, cfg.PulseAppID)
+		return pulseprefspulsemodules.NewNotifierDecorator(pulseinteractionscore.NewNotifierAdapter(client, cfg.PulseAppID), prefsSvc)
 	}
 	pulseinteractions.RegisterRoutes(mux, interactionsSvc, newInteractionsCore, newPresence, newNotifier,
 		pulseinteractionspulsemodules.NewSignalsAdapter(signalsSvc), requireUser)
@@ -103,11 +106,19 @@ func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, conne
 		return livetouchcore.NewPresenceAdapter(cfg.RealtimeAPIURL, token)
 	}
 	newLiveTouchNotifier := func(client *coresdk.Client) livetouch.Notifier {
-		return livetouchcore.NewNotifierAdapter(client, cfg.PulseAppID)
+		return pulseprefspulsemodules.NewNotifierDecorator(livetouchcore.NewNotifierAdapter(client, cfg.PulseAppID), prefsSvc)
 	}
 	livetouch.RegisterRoutes(mux, liveTouchSvc, newLiveTouchPresence, newLiveTouchNotifier, requireUser)
 
 	moments.RegisterRoutes(mux, momentsSvc, momentspulsemodules.NewInteractionsAdapter(interactionsSvc), requireUser)
+
+	newQuietHours := func(client *coresdk.Client) pulseprefs.CoreQuietHours {
+		return pulseprefscore.NewQuietHoursAdapter(client, cfg.PulseAppID)
+	}
+	newMutes := func(client *coresdk.Client) pulseprefs.CoreMutes {
+		return pulseprefscore.NewMutesAdapter(client)
+	}
+	pulseprefs.RegisterRoutes(mux, prefsSvc, newQuietHours, newMutes, requireUser)
 
 	return metrics.Middleware(serviceName, mux, corsMiddleware(correlation.Middleware(mux)))
 }

@@ -22,6 +22,9 @@ http.Client _fakeBackend({bool failLogin = false}) {
   final signalsList = <Map<String, dynamic>>[];
   final signalsSent = <String>[];
   final momentsList = <Map<String, dynamic>>[];
+  var prefs = {'notificationDetail': 'detailed', 'hapticIntensity': 1.0};
+  var quietHours = {'timezone': 'UTC', 'startMinute': 0, 'endMinute': 0, 'enabled': false};
+  final mutesList = <Map<String, dynamic>>[];
   return MockClient((req) async {
     if (req.url.path.contains('/protocol/openid-connect/token')) {
       if (failLogin) {
@@ -147,6 +150,37 @@ http.Client _fakeBackend({bool failLogin = false}) {
     final deleteMomentMatch = RegExp(r'^/v1/pulse/moments/([^/]+)$').firstMatch(req.url.path);
     if (deleteMomentMatch != null && req.method == 'DELETE') {
       momentsList.removeWhere((m) => m['id'] == deleteMomentMatch.group(1));
+      return http.Response('', 204);
+    }
+    if (req.method == 'GET' && req.url.path == '/v1/pulse/preferences') {
+      return http.Response(jsonEncode(prefs), 200, headers: {'content-type': 'application/json'});
+    }
+    if (req.method == 'PUT' && req.url.path == '/v1/pulse/preferences') {
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      prefs = {'notificationDetail': body['notificationDetail'], 'hapticIntensity': body['hapticIntensity']};
+      return http.Response(jsonEncode(prefs), 200, headers: {'content-type': 'application/json'});
+    }
+    if (req.method == 'GET' && req.url.path == '/v1/pulse/preferences/quiet-hours') {
+      return http.Response(jsonEncode(quietHours), 200, headers: {'content-type': 'application/json'});
+    }
+    if (req.method == 'PUT' && req.url.path == '/v1/pulse/preferences/quiet-hours') {
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      quietHours = {'timezone': body['timezone'], 'startMinute': body['startMinute'], 'endMinute': body['endMinute'], 'enabled': body['enabled']};
+      return http.Response(jsonEncode(quietHours), 200, headers: {'content-type': 'application/json'});
+    }
+    if (req.method == 'POST' && req.url.path == '/v1/pulse/preferences/mutes') {
+      final body = jsonDecode(req.body) as Map<String, dynamic>;
+      final mutedUserId = body['mutedUserId'] as String;
+      final m = {'id': 'mute-${mutesList.length + 1}', 'mutedUserId': mutedUserId, 'createdAt': '2026-01-01T00:00:00.000Z'};
+      mutesList.add(m);
+      return http.Response(jsonEncode(m), 201, headers: {'content-type': 'application/json'});
+    }
+    if (req.method == 'GET' && req.url.path == '/v1/pulse/preferences/mutes') {
+      return http.Response(jsonEncode({'items': mutesList}), 200, headers: {'content-type': 'application/json'});
+    }
+    final unmuteMatch = RegExp(r'^/v1/pulse/preferences/mutes/([^/]+)$').firstMatch(req.url.path);
+    if (unmuteMatch != null && req.method == 'DELETE') {
+      mutesList.removeWhere((m) => m['mutedUserId'] == unmuteMatch.group(1));
       return http.Response('', 204);
     }
     if (req.method == 'PUT' && req.url.path == '/v1/pulse/mood') {
@@ -418,5 +452,42 @@ void main() {
 
     expect(find.text('@demo_pulse'), findsOneWidget);
     expect(find.textContaining('Core User ID: user-1'), findsOneWidget);
+  });
+
+  testWidgets('Experience Controls (notification detail, haptic intensity, quiet hours, mute) round-trip through the real pulse-api chain', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Profile'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('notificationDetailDropdown')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('notificationDetailDropdown')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Private — generic notification only').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Private — generic notification only'), findsOneWidget);
+
+    await tester.ensureVisible(find.byKey(const Key('quietHoursEnabledSwitch')));
+    await tester.tap(find.byKey(const Key('quietHoursEnabledSwitch')));
+    await tester.pumpAndSettle();
+
+    final switchWidget = tester.widget<Switch>(find.byKey(const Key('quietHoursEnabledSwitch')));
+    expect(switchWidget.value, isTrue);
+
+    await tester.ensureVisible(find.byKey(const Key('muteUserIdField')));
+    await tester.enterText(find.byKey(const Key('muteUserIdField')), 'user-2friend');
+    await tester.ensureVisible(find.byKey(const Key('muteButton')));
+    await tester.tap(find.byKey(const Key('muteButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('user-2friend'), findsOneWidget);
+
+    await tester.tap(find.text('Unmute'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('user-2friend'), findsNothing);
   });
 }

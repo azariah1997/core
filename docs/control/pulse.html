@@ -199,8 +199,8 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">13 / 18</div><div class="label">Phases complete (Audit → Moments)</div></div>
-    <div class="stat-pill"><div class="num">8 / 10</div><div class="label">Pulse domain modules live</div></div>
+    <div class="stat-pill"><div class="num">14 / 18</div><div class="label">Phases complete (Audit → Experience Controls)</div></div>
+    <div class="stat-pill"><div class="num">9 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
     <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
@@ -468,7 +468,7 @@ Core Platform</pre>
   <p class="hint">Full detail in <code>apps/pulse/docs/ARCHITECTURE_AUDIT.md</code>. Every row below was verified against real Core Platform source in this repository — nothing here was assumed from a module name.</p>
 
   <div class="card">
-    <h3>Pulse-owned domain modules (8 of 10 live)</h3>
+    <h3>Pulse-owned domain modules (9 of 10 live)</h3>
     <table>
       <thead><tr><th>Module</th><th>Owns</th><th>Depends on</th><th>Phase</th></tr></thead>
       <tbody>
@@ -480,7 +480,7 @@ Core Platform</pre>
         <tr><td><code>live-touch</code> <span class="badge done">Done</span></td><td>Synchronous touch session lifecycle</td><td>bond</td><td>10</td></tr>
         <tr><td><code>signals</code> <span class="badge done">Done</span></td><td>Custom touch-pattern storage</td><td>Core relationships</td><td>11</td></tr>
         <tr><td><code>moments</code> <span class="badge done">Done</span></td><td>Saved-highlights timeline (references only, no chat)</td><td>pulse-interactions</td><td>12</td></tr>
-        <tr><td><code>pulse-preferences</code></td><td>Notification detail level, mute</td><td>Core <code>notifications</code></td><td>13</td></tr>
+        <tr><td><code>pulse-preferences</code> <span class="badge done">Done</span></td><td>Notification detail, haptic intensity, thin surface over Core Quiet Hours &amp; Mute</td><td>Core <code>notifications</code>, <code>trustsafety</code></td><td>13</td></tr>
         <tr><td><code>pulse-entitlements</code></td><td><code>pulse.plus</code> feature gating</td><td>Core <code>billing</code></td><td>16</td></tr>
       </tbody>
     </table>
@@ -782,9 +782,18 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">13</span>Quiet Hours / Experience Controls <span class="badge pending">Pending</span></h3>
-    <p>Quiet hours, mute, notification privacy, haptic intensity, device preferences.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">13</span>Quiet Hours / Experience Controls <span class="badge done">Done</span></h3>
+    <p><code>GET/PUT /v1/pulse/preferences</code>, <code>.../quiet-hours</code>, <code>POST/GET/DELETE .../mutes</code> - a new <code>pulse-preferences</code> module owning exactly the two fields genuinely Pulse's: notification detail level (Detailed/Private/Silent) and haptic intensity. Quiet Hours and Mute are deliberately <i>not</i> duplicated as Pulse-owned storage - both are real, already-live Core capabilities (<code>notifications.QuietHours</code>, platform-wide <code>trustsafety.Mute</code>) this module is a thin, Pulse-scoped settings surface over, correcting this module's own original planning stub which had assumed Mute needed its own table. A <code>NotifierDecorator</code> wraps the real Notifier both pulse-interactions and live-touch already use - one decorator type structurally satisfies both modules' identically-shaped <code>Notifier</code> interface (Go's structural typing) - and reads the <i>receiver's</i> own preference directly from Pulse's own database before every push: <code>silent</code> skips the notification entirely (the interaction itself still succeeds and is recorded normally), <code>private</code> still sends one but with generic, redacted content, and <code>detailed</code> (the default, applied automatically to every existing user) passes the real content through exactly as every prior phase already did. Quiet Hours needed no equivalent enforcement wiring - Core's own <code>notifications.Service.Send</code> was already suppressing interruptive channels during a receiver's real quiet-hours window before this phase existed. One gap is named and deliberately deferred, not silently built: delivery-time Mute suppression (Architecture Audit's AUTHORIZATION MODEL item 7) needs Pulse to know whether the receiver mutes the sender, but Core's Mute is deliberately self-scoped (a user can only read their own mute list via their own token) - closing this needs a new, unscoped Core capability, which per this platform's Phase-5 precedent for cross-cutting Core changes requires explicit sign-off, not something added silently. Live-validated end to end with the real Alice/Bob sample users against real Postgres and real Core: preferences persisting and round-tripping; Quiet Hours set through Pulse confirmed to write the exact same row Core's own endpoint reads back; Mute/list/unmute confirmed against Core's real global mute table; and all three notification-detail states verified against a real offline-push Knock - silent left Bob's real Core notification count unchanged, private added one real notification with redacted content, and detailed delivered the real title/body/pattern data with zero regression. Mobile ships a real Experience Controls section on the Profile tab.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Notification detail level and haptic intensity are Pulse-owned; Quiet Hours and Mute are thin proxies over real, already-live Core capabilities, never duplicated storage</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>One NotifierDecorator, structurally satisfying both pulse-interactions' and live-touch's Notifier interfaces, reads the receiver's own preference before every push</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Silent suppresses the notification entirely; Private redacts content; Detailed (default) is a zero-regression passthrough</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Quiet Hours proxy confirmed to write/read the exact same real Core row</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mute/list/unmute confirmed against Core's real global mute table</li>
+      <li><div class="box" style="background:var(--pending);border-color:var(--pending)"></div>Named, deferred gap: delivery-time Mute suppression needs a new unscoped Core capability, pending explicit sign-off</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mobile: Experience Controls on the Profile tab (notification detail, haptic intensity slider wired live into HapticEngine, Quiet Hours, Mute/Unmute)</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">

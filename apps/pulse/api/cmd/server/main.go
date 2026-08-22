@@ -26,6 +26,8 @@ import (
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions"
 	pulseinteractionscore "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/core"
 	pulseinteractionspg "github.com/example/core-platform/apps/pulse/api/internal/pulseinteractions/postgres"
+	"github.com/example/core-platform/apps/pulse/api/internal/pulseprefs"
+	pulseprefspg "github.com/example/core-platform/apps/pulse/api/internal/pulseprefs/postgres"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseprofile"
 	pulseprofilepg "github.com/example/core-platform/apps/pulse/api/internal/pulseprofile/postgres"
 	"github.com/example/core-platform/apps/pulse/api/internal/signals"
@@ -118,7 +120,9 @@ func main() {
 
 	momentsSvc := moments.NewService(momentspg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc, liveTouchSvc, signalsSvc, momentsSvc))
+	prefsSvc := pulseprefs.NewService(pulseprefspg.New(pool))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc, liveTouchSvc, signalsSvc, momentsSvc, prefsSvc))
 
 	addr := env("PULSE_HTTP_ADDR", ":8096")
 	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}

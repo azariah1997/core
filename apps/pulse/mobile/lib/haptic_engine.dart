@@ -17,6 +17,18 @@ enum HapticCapability { advanced, standard, unavailable }
 /// here rather than faked.
 abstract class HapticEngine {
   HapticCapability get capability;
+
+  /// Experience Controls (product spec §72, Phase 13) - 0.0 (mute) to
+  /// 1.0 (full). Flutter's cross-platform HapticFeedback API has no
+  /// continuous intensity control (only a handful of named tiers), so
+  /// the STANDARD tier's honest approximation is picking a lighter tier
+  /// below 0.5 and skipping playback entirely at 0 - real, felt
+  /// behavior change, not a no-op setting. True continuous intensity
+  /// needs the same native ADVANCED-tier platform-channel work already
+  /// named as a gap above.
+  double get intensity;
+  set intensity(double value);
+
   Future<void> playPulseStart();
   Future<void> playPulseStop();
   Future<void> playKnock();
@@ -38,20 +50,33 @@ abstract class HapticEngine {
 }
 
 class StandardHapticEngine implements HapticEngine {
+  double _intensity = 1.0;
+
+  @override
+  double get intensity => _intensity;
+  @override
+  set intensity(double value) => _intensity = value.clamp(0.0, 1.0);
+
   @override
   HapticCapability get capability => HapticCapability.standard;
 
-  @override
-  Future<void> playPulseStart() => HapticFeedback.mediumImpact();
+  Future<void> _play(Future<void> Function() full, Future<void> Function() light) {
+    if (_intensity <= 0) return Future.value();
+    return (_intensity < 0.5 ? light : full)();
+  }
 
   @override
-  Future<void> playPulseStop() => HapticFeedback.lightImpact();
+  Future<void> playPulseStart() => _play(HapticFeedback.mediumImpact, HapticFeedback.selectionClick);
 
   @override
-  Future<void> playKnock() => HapticFeedback.selectionClick();
+  Future<void> playPulseStop() => _play(HapticFeedback.lightImpact, HapticFeedback.selectionClick);
+
+  @override
+  Future<void> playKnock() => _play(HapticFeedback.selectionClick, HapticFeedback.selectionClick);
 
   @override
   Future<void> playSegments(List<dynamic> segments) async {
+    if (_intensity <= 0) return;
     for (final seg in segments) {
       final type = seg is Map ? seg['type'] as String? : null;
       final durationMs = seg is Map ? (seg['durationMs'] as num?)?.toInt() ?? 0 : 0;
@@ -60,7 +85,7 @@ class StandardHapticEngine implements HapticEngine {
           await HapticFeedback.selectionClick();
           break;
         case 'hold':
-          await HapticFeedback.heavyImpact();
+          await _play(HapticFeedback.heavyImpact, HapticFeedback.selectionClick);
           break;
         case 'pause':
           break;
@@ -73,6 +98,11 @@ class StandardHapticEngine implements HapticEngine {
 /// Used on web and any platform HapticFeedback has nothing real to do
 /// on - every caller must still function normally against this engine.
 class UnavailableHapticEngine implements HapticEngine {
+  double _intensity = 1.0;
+  @override
+  double get intensity => _intensity;
+  @override
+  set intensity(double value) => _intensity = value.clamp(0.0, 1.0);
   @override
   HapticCapability get capability => HapticCapability.unavailable;
   @override

@@ -367,7 +367,7 @@ class _HomeShellState extends State<HomeShell> {
       _PeopleTab(pulseApi: widget.pulseApi),
       _MoodTab(pulseApi: widget.pulseApi),
       _MomentsTab(pulseApi: widget.pulseApi),
-      _ProfileTab(pulseApi: widget.pulseApi),
+      _ProfileTab(pulseApi: widget.pulseApi, haptics: _haptics),
     ];
     return Scaffold(
       body: SafeArea(
@@ -1587,7 +1587,8 @@ class _PlaceholderTab extends StatelessWidget {
 /// real pulse-profile row for the signed-in Core user.
 class _ProfileTab extends StatefulWidget {
   final PulseApi pulseApi;
-  const _ProfileTab({required this.pulseApi});
+  final HapticEngine haptics;
+  const _ProfileTab({required this.pulseApi, required this.haptics});
   @override
   State<_ProfileTab> createState() => _ProfileTabState();
 }
@@ -1596,10 +1597,29 @@ class _ProfileTabState extends State<_ProfileTab> {
   PulseProfile? _profile;
   String? _error;
 
+  PulsePreferences? _prefs;
+  PulseQuietHours? _quietHours;
+  List<PulseMute> _mutes = [];
+  // Experience Controls gets its own error surface, never the profile
+  // load's - a preferences hiccup shouldn't blank out the whole tab.
+  String? _prefsError;
+  final _quietHoursTimezone = TextEditingController(text: 'UTC');
+  final _muteUserId = TextEditingController();
+  int _quietHoursStartHour = 22;
+  int _quietHoursEndHour = 7;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadExperienceControls();
+  }
+
+  @override
+  void dispose() {
+    _quietHoursTimezone.dispose();
+    _muteUserId.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -1608,6 +1628,86 @@ class _ProfileTabState extends State<_ProfileTab> {
       setState(() => _profile = profile);
     } catch (err) {
       setState(() => _error = '$err');
+    }
+  }
+
+  Future<void> _loadExperienceControls() async {
+    try {
+      final prefs = await widget.pulseApi.getPreferences();
+      final quietHours = await widget.pulseApi.getQuietHours();
+      final mutes = await widget.pulseApi.listMutes();
+      widget.haptics.intensity = prefs.hapticIntensity;
+      setState(() {
+        _prefs = prefs;
+        _quietHours = quietHours;
+        _quietHoursTimezone.text = quietHours.timezone;
+        _quietHoursStartHour = quietHours.startMinute ~/ 60;
+        _quietHoursEndHour = quietHours.endMinute ~/ 60;
+        _mutes = mutes;
+      });
+    } catch (err) {
+      setState(() => _prefsError = '$err');
+    }
+  }
+
+  Future<void> _setNotificationDetail(String detail) async {
+    final current = _prefs;
+    if (current == null) return;
+    try {
+      final updated = await widget.pulseApi.setPreferences(notificationDetail: detail, hapticIntensity: current.hapticIntensity);
+      setState(() => _prefs = updated);
+    } catch (err) {
+      setState(() => _prefsError = '$err');
+    }
+  }
+
+  Future<void> _setHapticIntensity(double intensity) async {
+    final current = _prefs;
+    if (current == null) return;
+    try {
+      final updated = await widget.pulseApi.setPreferences(notificationDetail: current.notificationDetail, hapticIntensity: intensity);
+      widget.haptics.intensity = updated.hapticIntensity;
+      setState(() => _prefs = updated);
+    } catch (err) {
+      setState(() => _prefsError = '$err');
+    }
+  }
+
+  Future<void> _saveQuietHours(bool enabled) async {
+    try {
+      final updated = await widget.pulseApi.setQuietHours(
+        timezone: _quietHoursTimezone.text.trim().isEmpty ? 'UTC' : _quietHoursTimezone.text.trim(),
+        startMinute: _quietHoursStartHour * 60,
+        endMinute: _quietHoursEndHour * 60,
+        enabled: enabled,
+      );
+      setState(() => _quietHours = updated);
+    } catch (err) {
+      setState(() => _prefsError = '$err');
+    }
+  }
+
+  Future<void> _mute() async {
+    final userId = _muteUserId.text.trim();
+    if (userId.isEmpty) return;
+    try {
+      await widget.pulseApi.mute(userId);
+      final mutes = await widget.pulseApi.listMutes();
+      setState(() {
+        _mutes = mutes;
+        _muteUserId.clear();
+      });
+    } catch (err) {
+      setState(() => _prefsError = '$err');
+    }
+  }
+
+  Future<void> _unmute(String userId) async {
+    try {
+      await widget.pulseApi.unmute(userId);
+      setState(() => _mutes = _mutes.where((m) => m.mutedUserId != userId).toList());
+    } catch (err) {
+      setState(() => _prefsError = '$err');
     }
   }
 
@@ -1620,18 +1720,103 @@ class _ProfileTabState extends State<_ProfileTab> {
     if (profile == null) {
       return const Center(child: CircularProgressIndicator());
     }
-    return Padding(
+    final prefs = _prefs;
+    final quietHours = _quietHours;
+    return ListView(
       padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Pulse handle', style: Theme.of(context).textTheme.labelMedium),
-          Text('@${profile.handle}', style: Theme.of(context).textTheme.headlineSmall),
+      children: [
+        Text('Pulse handle', style: Theme.of(context).textTheme.labelMedium),
+        Text('@${profile.handle}', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 16),
+        Text('Core User ID: ${profile.userId}'),
+        Text('Created: ${profile.createdAt}'),
+        const Divider(height: 40),
+        Text('Experience Controls', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 4),
+        Text('Quiet hours, notification detail, and haptic intensity — never obligation.', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 16),
+        if (prefs != null) ...[
+          Text('Notification detail', style: Theme.of(context).textTheme.labelLarge),
+          DropdownButton<String>(
+            key: const Key('notificationDetailDropdown'),
+            value: prefs.notificationDetail,
+            items: const [
+              DropdownMenuItem(value: 'detailed', child: Text('Detailed — full content')),
+              DropdownMenuItem(value: 'private', child: Text('Private — generic notification only')),
+              DropdownMenuItem(value: 'silent', child: Text('Silent — no push notification')),
+            ],
+            onChanged: (v) {
+              if (v != null) _setNotificationDetail(v);
+            },
+          ),
           const SizedBox(height: 16),
-          Text('Core User ID: ${profile.userId}'),
-          Text('Created: ${profile.createdAt}'),
+          Text('Haptic intensity: ${(prefs.hapticIntensity * 100).round()}%', style: Theme.of(context).textTheme.labelLarge),
+          Slider(
+            key: const Key('hapticIntensitySlider'),
+            value: prefs.hapticIntensity,
+            onChanged: (v) => setState(() => _prefs = PulsePreferences(notificationDetail: prefs.notificationDetail, hapticIntensity: v)),
+            onChangeEnd: _setHapticIntensity,
+          ),
         ],
-      ),
+        const SizedBox(height: 16),
+        if (quietHours != null) ...[
+          Row(
+            children: [
+              Text('Quiet hours', style: Theme.of(context).textTheme.labelLarge),
+              const Spacer(),
+              Switch(key: const Key('quietHoursEnabledSwitch'), value: quietHours.enabled, onChanged: _saveQuietHours),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(key: const Key('quietHoursTimezoneField'), controller: _quietHoursTimezone, decoration: const InputDecoration(labelText: 'Timezone (IANA)')),
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              const Text('From '),
+              DropdownButton<int>(
+                key: const Key('quietHoursStartHourDropdown'),
+                value: _quietHoursStartHour,
+                items: [for (var h = 0; h < 24; h++) DropdownMenuItem(value: h, child: Text('$h:00'))],
+                onChanged: (v) => setState(() => _quietHoursStartHour = v ?? _quietHoursStartHour),
+              ),
+              const Text(' to '),
+              DropdownButton<int>(
+                key: const Key('quietHoursEndHourDropdown'),
+                value: _quietHoursEndHour,
+                items: [for (var h = 0; h < 24; h++) DropdownMenuItem(value: h, child: Text('$h:00'))],
+                onChanged: (v) => setState(() => _quietHoursEndHour = v ?? _quietHoursEndHour),
+              ),
+              const SizedBox(width: 8),
+              TextButton(key: const Key('saveQuietHoursButton'), onPressed: () => _saveQuietHours(quietHours.enabled), child: const Text('Save')),
+            ],
+          ),
+        ],
+        const Divider(height: 40),
+        Text('Muted', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text('Muting is silent and one-directional — the muted person is never told.', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            Expanded(child: TextField(key: const Key('muteUserIdField'), controller: _muteUserId, decoration: const InputDecoration(labelText: 'User ID to mute'))),
+            const SizedBox(width: 8),
+            FilledButton(key: const Key('muteButton'), onPressed: _mute, child: const Text('Mute')),
+          ],
+        ),
+        for (final m in _mutes)
+          ListTile(
+            title: Text(m.mutedUserId),
+            trailing: TextButton(onPressed: () => _unmute(m.mutedUserId), child: const Text('Unmute')),
+          ),
+        if (_prefsError != null) ...[
+          const SizedBox(height: 12),
+          Text(_prefsError!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ],
+      ],
     );
   }
 }

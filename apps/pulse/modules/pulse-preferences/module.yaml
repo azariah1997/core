@@ -1,6 +1,6 @@
 name: pulse-preferences
 owner: pulse
-lifecycle: planned
+lifecycle: experimental
 dependencies:
   - core:notifications
-  - pulse-profile
+  - core:trustsafety

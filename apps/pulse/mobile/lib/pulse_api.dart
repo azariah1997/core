@@ -230,6 +230,97 @@ class PulseApi {
       );
 
   Future<void> deleteMoment(String id) => _client.request('DELETE', '/v1/pulse/moments/$id');
+
+  /// Experience Controls (Phase 13) - notification detail level and
+  /// haptic intensity are Pulse's own preferences (Core has no concept
+  /// of either).
+  Future<PulsePreferences> getPreferences() => _client.request(
+        'GET',
+        '/v1/pulse/preferences',
+        decode: (json) => PulsePreferences.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<PulsePreferences> setPreferences({required String notificationDetail, required double hapticIntensity}) => _client.request(
+        'PUT',
+        '/v1/pulse/preferences',
+        body: {'notificationDetail': notificationDetail, 'hapticIntensity': hapticIntensity},
+        decode: (json) => PulsePreferences.fromJson(json as Map<String, dynamic>),
+      );
+
+  /// Quiet Hours - a thin Pulse-side settings surface over Core's real,
+  /// already-live notifications.QuietHours (scoped to Pulse's own
+  /// AppID server-side); already enforced automatically before any push
+  /// leaves the platform.
+  Future<PulseQuietHours> getQuietHours() => _client.request(
+        'GET',
+        '/v1/pulse/preferences/quiet-hours',
+        decode: (json) => PulseQuietHours.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<PulseQuietHours> setQuietHours({required String timezone, required int startMinute, required int endMinute, required bool enabled}) => _client.request(
+        'PUT',
+        '/v1/pulse/preferences/quiet-hours',
+        body: {'timezone': timezone, 'startMinute': startMinute, 'endMinute': endMinute, 'enabled': enabled},
+        decode: (json) => PulseQuietHours.fromJson(json as Map<String, dynamic>),
+      );
+
+  /// Mute - a thin settings surface over Core's real, platform-wide
+  /// trustsafety.Mute (one-directional and silent, distinct from
+  /// Block).
+  Future<PulseMute> mute(String mutedUserId) => _client.request(
+        'POST',
+        '/v1/pulse/preferences/mutes',
+        body: {'mutedUserId': mutedUserId},
+        decode: (json) => PulseMute.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<List<PulseMute>> listMutes() => _client.request(
+        'GET',
+        '/v1/pulse/preferences/mutes',
+        decode: (json) => ((json as Map<String, dynamic>)['items'] as List).map((e) => PulseMute.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Future<void> unmute(String mutedUserId) => _client.request('DELETE', '/v1/pulse/preferences/mutes/$mutedUserId');
+}
+
+class PulsePreferences {
+  final String notificationDetail;
+  final double hapticIntensity;
+
+  PulsePreferences({required this.notificationDetail, required this.hapticIntensity});
+
+  factory PulsePreferences.fromJson(Map<String, dynamic> json) => PulsePreferences(
+        notificationDetail: json['notificationDetail'] as String,
+        hapticIntensity: (json['hapticIntensity'] as num).toDouble(),
+      );
+}
+
+class PulseQuietHours {
+  final String timezone;
+  final int startMinute;
+  final int endMinute;
+  final bool enabled;
+
+  PulseQuietHours({required this.timezone, required this.startMinute, required this.endMinute, required this.enabled});
+
+  factory PulseQuietHours.fromJson(Map<String, dynamic> json) => PulseQuietHours(
+        timezone: json['timezone'] as String,
+        startMinute: json['startMinute'] as int,
+        endMinute: json['endMinute'] as int,
+        enabled: json['enabled'] as bool,
+      );
+}
+
+class PulseMute {
+  final String id;
+  final String mutedUserId;
+
+  PulseMute({required this.id, required this.mutedUserId});
+
+  factory PulseMute.fromJson(Map<String, dynamic> json) => PulseMute(
+        id: json['id'] as String,
+        mutedUserId: json['mutedUserId'] as String,
+      );
 }
 
 class PulseMoment {
