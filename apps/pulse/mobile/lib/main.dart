@@ -366,7 +366,7 @@ class _HomeShellState extends State<HomeShell> {
       ),
       _PeopleTab(pulseApi: widget.pulseApi),
       _MoodTab(pulseApi: widget.pulseApi),
-      const _PlaceholderTab(title: 'Moments', subtitle: 'Saved shared moments, no chat — Phase 12'),
+      _MomentsTab(pulseApi: widget.pulseApi),
       _ProfileTab(pulseApi: widget.pulseApi),
     ];
     return Scaffold(
@@ -523,6 +523,11 @@ class _HomeTabState extends State<_HomeTab> {
   Duration _elapsed = Duration.zero;
   Timer? _ticker;
   String? _lastResult;
+  // "Save this moment ♥" (spec §31) - only meaningful once the most
+  // recent interaction has actually completed, so this and _lastResult
+  // are always set together.
+  String? _lastInteractionId;
+  bool _momentSaved = false;
 
   @override
   void initState() {
@@ -597,7 +602,11 @@ class _HomeTabState extends State<_HomeTab> {
     _activeInteractionId = null;
     try {
       final stopped = await widget.pulseApi.stop(id);
-      setState(() => _lastResult = 'Pulse sent — felt for ${stopped.durationMs ?? 0}ms');
+      setState(() {
+        _lastResult = 'Pulse sent — felt for ${stopped.durationMs ?? 0}ms';
+        _lastInteractionId = stopped.id;
+        _momentSaved = false;
+      });
     } catch (err) {
       setState(() => _error = '$err');
     }
@@ -611,8 +620,23 @@ class _HomeTabState extends State<_HomeTab> {
     if (target == null || _holding) return;
     widget.haptics.playKnock();
     try {
-      await widget.pulseApi.knock(target.otherUserId);
-      setState(() => _lastResult = 'Knock sent');
+      final knock = await widget.pulseApi.knock(target.otherUserId);
+      setState(() {
+        _lastResult = 'Knock sent';
+        _lastInteractionId = knock.id;
+        _momentSaved = false;
+      });
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  Future<void> _saveMoment() async {
+    final id = _lastInteractionId;
+    if (id == null) return;
+    try {
+      await widget.pulseApi.saveMoment(id);
+      setState(() => _momentSaved = true);
     } catch (err) {
       setState(() => _error = '$err');
     }
@@ -712,6 +736,14 @@ class _HomeTabState extends State<_HomeTab> {
           if (_lastResult != null) ...[
             const SizedBox(height: 12),
             Text(_lastResult!, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+            if (_lastInteractionId != null) ...[
+              const SizedBox(height: 4),
+              TextButton(
+                key: const Key('saveMomentButton'),
+                onPressed: _momentSaved ? null : _saveMoment,
+                child: Text(_momentSaved ? 'Saved ♥' : 'Save this moment ♥'),
+              ),
+            ],
           ],
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -881,6 +913,8 @@ class _SignalsScreenState extends State<SignalsScreen> {
   bool _loading = true;
   String? _error;
   String? _status;
+  String? _lastSentInteractionId;
+  bool _momentSaved = false;
 
   final _labelController = TextEditingController();
   final List<Map<String, dynamic>> _composing = [];
@@ -932,8 +966,23 @@ class _SignalsScreenState extends State<SignalsScreen> {
 
   Future<void> _send(PulseSignal sig) async {
     try {
-      await widget.pulseApi.sendSignal(sig.id);
-      setState(() => _status = 'Sent "${sig.label.isEmpty ? 'Signal' : sig.label}"');
+      final sent = await widget.pulseApi.sendSignal(sig.id);
+      setState(() {
+        _status = 'Sent "${sig.label.isEmpty ? 'Signal' : sig.label}"';
+        _lastSentInteractionId = sent.id;
+        _momentSaved = false;
+      });
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  Future<void> _saveMoment() async {
+    final id = _lastSentInteractionId;
+    if (id == null) return;
+    try {
+      await widget.pulseApi.saveMoment(id);
+      setState(() => _momentSaved = true);
     } catch (err) {
       setState(() => _error = '$err');
     }
@@ -1009,6 +1058,11 @@ class _SignalsScreenState extends State<SignalsScreen> {
           if (_status != null) ...[
             const SizedBox(height: 12),
             Text(_status!, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+            if (_lastSentInteractionId != null)
+              TextButton(
+                onPressed: _momentSaved ? null : _saveMoment,
+                child: Text(_momentSaved ? 'Saved ♥' : 'Save this moment ♥'),
+              ),
           ],
           if (_error != null) ...[
             const SizedBox(height: 12),
@@ -1388,6 +1442,122 @@ class _CircleTileState extends State<_CircleTile> {
           const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+}
+
+/// Moments (product spec §30-31, Phase 12): a private saved-highlights
+/// timeline - "avoid turning this into chat history." Any stats shown
+/// are deliberately gentle (spec §32: "12 little moments together this
+/// week," never a punishing streak count) and computed locally from the
+/// already-fetched list, no dedicated backend endpoint for it.
+class _MomentsTab extends StatefulWidget {
+  final PulseApi pulseApi;
+  const _MomentsTab({required this.pulseApi});
+
+  @override
+  State<_MomentsTab> createState() => _MomentsTabState();
+}
+
+class _MomentsTabState extends State<_MomentsTab> {
+  List<PulseMoment> _moments = [];
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final list = await widget.pulseApi.listMoments();
+      if (mounted) setState(() => _moments = list);
+    } catch (err) {
+      if (mounted) setState(() => _error = '$err');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _delete(PulseMoment m) async {
+    try {
+      await widget.pulseApi.deleteMoment(m.id);
+      setState(() => _moments = _moments.where((x) => x.id != m.id).toList());
+    } catch (err) {
+      setState(() => _error = '$err');
+    }
+  }
+
+  int get _thisWeekCount {
+    final weekAgo = DateTime.now().toUtc().subtract(const Duration(days: 7));
+    return _moments.where((m) {
+      final occurred = DateTime.tryParse(m.occurredAt);
+      return occurred != null && occurred.isAfter(weekAgo);
+    }).length;
+  }
+
+  IconData _iconFor(String type) {
+    switch (type) {
+      case 'knock':
+        return Icons.back_hand_outlined;
+      case 'signal':
+        return Icons.favorite_border;
+      default:
+        return Icons.favorite;
+    }
+  }
+
+  String _titleFor(PulseMoment m) {
+    switch (m.interactionType) {
+      case 'knock':
+        return 'A Knock';
+      case 'signal':
+        return 'A Signal';
+      default:
+        return m.durationMs != null ? 'A Pulse — felt for ${m.durationMs}ms' : 'A Pulse';
+    }
+  }
+
+  String _formatWhen(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return iso;
+    final local = dt.toLocal();
+    return '${local.year}-${local.month.toString().padLeft(2, '0')}-${local.day.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        Text('Moments', style: Theme.of(context).textTheme.headlineSmall),
+        const SizedBox(height: 4),
+        Text('A private timeline of meaningful moments — never a chat history.', style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 16),
+        if (_moments.isNotEmpty) ...[
+          Text('$_thisWeekCount little moments together this week.', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+          const SizedBox(height: 16),
+        ],
+        if (_moments.isEmpty) const Text('No moments saved yet.'),
+        for (final m in _moments)
+          Card(
+            child: ListTile(
+              leading: Icon(_iconFor(m.interactionType)),
+              title: Text(_titleFor(m)),
+              subtitle: Text('with @${m.otherUserId.substring(0, 8)} · ${_formatWhen(m.occurredAt)}'),
+              trailing: IconButton(icon: const Icon(Icons.delete_outline), onPressed: () => _delete(m)),
+            ),
+          ),
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+        ],
+      ],
     );
   }
 }

@@ -21,6 +21,7 @@ http.Client _fakeBackend({bool failLogin = false}) {
   final circleMembers = <String, List<String>>{};
   final signalsList = <Map<String, dynamic>>[];
   final signalsSent = <String>[];
+  final momentsList = <Map<String, dynamic>>[];
   return MockClient((req) async {
     if (req.url.path.contains('/protocol/openid-connect/token')) {
       if (failLogin) {
@@ -125,6 +126,28 @@ http.Client _fakeBackend({bool failLogin = false}) {
         201,
         headers: {'content-type': 'application/json'},
       );
+    }
+    final saveMomentMatch = RegExp(r'^/v1/pulse/moments/([^/]+)/save$').firstMatch(req.url.path);
+    if (saveMomentMatch != null && req.method == 'POST') {
+      final moment = {
+        'id': 'moment-${momentsList.length + 1}',
+        'interactionId': saveMomentMatch.group(1),
+        'otherUserId': 'user-2friend',
+        'interactionType': 'pulse',
+        'durationMs': 842,
+        'occurredAt': '2026-01-01T00:00:00.000Z',
+        'savedAt': '2026-01-01T00:00:00.000Z',
+      };
+      momentsList.add(moment);
+      return http.Response(jsonEncode(moment), 201, headers: {'content-type': 'application/json'});
+    }
+    if (req.method == 'GET' && req.url.path == '/v1/pulse/moments') {
+      return http.Response(jsonEncode({'items': momentsList}), 200, headers: {'content-type': 'application/json'});
+    }
+    final deleteMomentMatch = RegExp(r'^/v1/pulse/moments/([^/]+)$').firstMatch(req.url.path);
+    if (deleteMomentMatch != null && req.method == 'DELETE') {
+      momentsList.removeWhere((m) => m['id'] == deleteMomentMatch.group(1));
+      return http.Response('', 204);
     }
     if (req.method == 'PUT' && req.url.path == '/v1/pulse/mood') {
       final body = jsonDecode(req.body) as Map<String, dynamic>;
@@ -249,6 +272,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Pulse sent — felt for 842ms'), findsOneWidget);
+  });
+
+  testWidgets('saving a completed Pulse as a Moment round-trips and shows up on the Moments tab', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    final gesture = await tester.startGesture(tester.getCenter(find.byKey(const Key('pulseButton'))));
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('saveMomentButton')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('saveMomentButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Saved ♥'), findsOneWidget);
+
+    await tester.tap(find.text('Moments'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('A Pulse — felt for 842ms'), findsOneWidget);
   });
 
   testWidgets('tapping Knock sends a real Knock round trip', (tester) async {

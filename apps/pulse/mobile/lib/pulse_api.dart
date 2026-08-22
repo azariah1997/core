@@ -212,6 +212,42 @@ class PulseApi {
         '/v1/pulse/signals/$id/send',
         decode: (json) => PulseInteraction.fromJson(json as Map<String, dynamic>),
       );
+
+  /// Moments (product spec §30-31, Phase 12) - "Save this moment ♥."
+  /// A personal bookmark: saving is idempotent (saving the same
+  /// interaction twice returns the original), and never automatically
+  /// shared with the other participant - they'd need their own Save.
+  Future<PulseMoment> saveMoment(String interactionId) => _client.request(
+        'POST',
+        '/v1/pulse/moments/$interactionId/save',
+        decode: (json) => PulseMoment.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<List<PulseMoment>> listMoments() => _client.request(
+        'GET',
+        '/v1/pulse/moments',
+        decode: (json) => ((json as Map<String, dynamic>)['items'] as List).map((e) => PulseMoment.fromJson(e as Map<String, dynamic>)).toList(),
+      );
+
+  Future<void> deleteMoment(String id) => _client.request('DELETE', '/v1/pulse/moments/$id');
+}
+
+class PulseMoment {
+  final String id;
+  final String otherUserId;
+  final String interactionType;
+  final int? durationMs;
+  final String occurredAt;
+
+  PulseMoment({required this.id, required this.otherUserId, required this.interactionType, this.durationMs, required this.occurredAt});
+
+  factory PulseMoment.fromJson(Map<String, dynamic> json) => PulseMoment(
+        id: json['id'] as String,
+        otherUserId: json['otherUserId'] as String,
+        interactionType: json['interactionType'] as String,
+        durationMs: json['durationMs'] as int?,
+        occurredAt: json['occurredAt'] as String,
+      );
 }
 
 class PulseBond {

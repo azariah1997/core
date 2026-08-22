@@ -15,6 +15,8 @@ import (
 	livetouchcore "github.com/example/core-platform/apps/pulse/api/internal/livetouch/core"
 	livetouchpg "github.com/example/core-platform/apps/pulse/api/internal/livetouch/postgres"
 	livetouchpulsemodules "github.com/example/core-platform/apps/pulse/api/internal/livetouch/pulsemodules"
+	"github.com/example/core-platform/apps/pulse/api/internal/moments"
+	momentspg "github.com/example/core-platform/apps/pulse/api/internal/moments/postgres"
 	"github.com/example/core-platform/apps/pulse/api/internal/mood"
 	moodcore "github.com/example/core-platform/apps/pulse/api/internal/mood/core"
 	moodpg "github.com/example/core-platform/apps/pulse/api/internal/mood/postgres"
@@ -114,7 +116,9 @@ func main() {
 
 	signalsSvc := signals.NewService(signalspg.New(pool))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc, liveTouchSvc, signalsSvc))
+	momentsSvc := moments.NewService(momentspg.New(pool))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc, liveTouchSvc, signalsSvc, momentsSvc))
 
 	addr := env("PULSE_HTTP_ADDR", ":8096")
 	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}

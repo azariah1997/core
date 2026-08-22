@@ -199,8 +199,8 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">12 / 18</div><div class="label">Phases complete (Audit → Custom Touch Language)</div></div>
-    <div class="stat-pill"><div class="num">7 / 10</div><div class="label">Pulse domain modules live</div></div>
+    <div class="stat-pill"><div class="num">13 / 18</div><div class="label">Phases complete (Audit → Moments)</div></div>
+    <div class="stat-pill"><div class="num">8 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
     <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
@@ -468,7 +468,7 @@ Core Platform</pre>
   <p class="hint">Full detail in <code>apps/pulse/docs/ARCHITECTURE_AUDIT.md</code>. Every row below was verified against real Core Platform source in this repository — nothing here was assumed from a module name.</p>
 
   <div class="card">
-    <h3>Pulse-owned domain modules (7 of 10 live)</h3>
+    <h3>Pulse-owned domain modules (8 of 10 live)</h3>
     <table>
       <thead><tr><th>Module</th><th>Owns</th><th>Depends on</th><th>Phase</th></tr></thead>
       <tbody>
@@ -479,7 +479,7 @@ Core Platform</pre>
         <tr><td><code>mood</code> <span class="badge done">Done</span></td><td>Today's Mood, audience, expiry</td><td>pulse-connections, bond</td><td>8</td></tr>
         <tr><td><code>live-touch</code> <span class="badge done">Done</span></td><td>Synchronous touch session lifecycle</td><td>bond</td><td>10</td></tr>
         <tr><td><code>signals</code> <span class="badge done">Done</span></td><td>Custom touch-pattern storage</td><td>Core relationships</td><td>11</td></tr>
-        <tr><td><code>moments</code></td><td>Saved-highlights timeline (references only, no chat)</td><td>pulse-interactions</td><td>12</td></tr>
+        <tr><td><code>moments</code> <span class="badge done">Done</span></td><td>Saved-highlights timeline (references only, no chat)</td><td>pulse-interactions</td><td>12</td></tr>
         <tr><td><code>pulse-preferences</code></td><td>Notification detail level, mute</td><td>Core <code>notifications</code></td><td>13</td></tr>
         <tr><td><code>pulse-entitlements</code></td><td><code>pulse.plus</code> feature gating</td><td>Core <code>billing</code></td><td>16</td></tr>
       </tbody>
@@ -769,9 +769,17 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">12</span>Moments <span class="badge pending">Pending</span></h3>
-    <p>Recent interactions, save moment, retention, privacy. No chat.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">12</span>Moments <span class="badge done">Done</span></h3>
+    <p><code>POST /v1/pulse/moments/{interactionId}/save</code>, <code>GET /v1/pulse/moments</code>, <code>DELETE .../{id}</code> - a private saved-highlights timeline (new <code>moments</code> module), explicitly not a chat history: it stores only a reference to an already-real interaction (type, duration, pattern, the other participant, timestamps), never a copy of its payload. A Moment is a personal bookmark, not a shared record - the two participants in the same interaction each get their own independent row, matching how "save" buttons work everywhere else, enforced by a real Postgres unique constraint on <code>(saved_by_user_id, interaction_id)</code> that also makes re-saving idempotent. <code>moments.Service.Save</code> consumes pulse-interactions in-process via the same <code>pulsemodules</code> adapter pattern Signals and Mood/Live Touch already established, so it never re-implements the sender/receiver-only participation check <code>pulseinteractions.Service.Get</code> already does - it only adds its own rule that the interaction must be <code>completed</code>. No auto-expiry, unlike Mood's deliberate daily decay - a Moment's whole purpose is durability, so retention just means the explicit Delete. Live-validated end to end with the real Alice/Bob/Carol sample users against real Postgres: saving a real completed Signal, a second participant independently saving the same interaction to their own list with the perspective-correct other-user ID, a real 403 rejecting a non-participant, an idempotent re-save returning the same moment, and a real delete/re-list round trip. Mobile ships a real Moments tab (gentle "N little moments together this week" stat per spec §32, computed client-side - never a punishing streak counter - plus per-row delete) and a "Save this moment ♥" button wired into both the Home tab (after a Pulse or Knock completes) and the Signals screen (after a Signal send).</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>References only - no duplication of interaction content, no chat history</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Personal bookmark model - each participant saves independently, idempotent per caller via a real DB unique constraint</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Save reuses pulse-interactions' own participation check - no duplicated authorization</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Only a completed interaction can be saved</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Gentle stats, never a streak counter - computed client-side from already-fetched data</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mobile: real Moments tab (list + delete) and "Save this moment ♥" on Pulse/Knock/Signal completion</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">

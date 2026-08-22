@@ -11,6 +11,8 @@ import (
 	bondcore "github.com/example/core-platform/apps/pulse/api/internal/bond/core"
 	"github.com/example/core-platform/apps/pulse/api/internal/livetouch"
 	livetouchcore "github.com/example/core-platform/apps/pulse/api/internal/livetouch/core"
+	"github.com/example/core-platform/apps/pulse/api/internal/moments"
+	momentspulsemodules "github.com/example/core-platform/apps/pulse/api/internal/moments/pulsemodules"
 	"github.com/example/core-platform/apps/pulse/api/internal/mood"
 	"github.com/example/core-platform/apps/pulse/api/internal/mood/pulsemodules"
 	"github.com/example/core-platform/apps/pulse/api/internal/pulseauth"
@@ -44,7 +46,7 @@ type Config struct {
 	PulseAppID string
 }
 
-func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, connectionsSvc *pulseconnections.Service, bondSvc *bond.Service, interactionsSvc *pulseinteractions.Service, moodSvc *mood.Service, liveTouchSvc *livetouch.Service, signalsSvc *signals.Service) http.Handler {
+func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, connectionsSvc *pulseconnections.Service, bondSvc *bond.Service, interactionsSvc *pulseinteractions.Service, moodSvc *mood.Service, liveTouchSvc *livetouch.Service, signalsSvc *signals.Service, momentsSvc *moments.Service) http.Handler {
 	mux := http.NewServeMux()
 
 	checks := func(ctx context.Context) []health.Result {
@@ -104,6 +106,8 @@ func New(cfg Config, pool *pgxpool.Pool, profileSvc *pulseprofile.Service, conne
 		return livetouchcore.NewNotifierAdapter(client, cfg.PulseAppID)
 	}
 	livetouch.RegisterRoutes(mux, liveTouchSvc, newLiveTouchPresence, newLiveTouchNotifier, requireUser)
+
+	moments.RegisterRoutes(mux, momentsSvc, momentspulsemodules.NewInteractionsAdapter(interactionsSvc), requireUser)
 
 	return metrics.Middleware(serviceName, mux, corsMiddleware(correlation.Middleware(mux)))
 }
