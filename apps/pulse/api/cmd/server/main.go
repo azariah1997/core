@@ -11,6 +11,10 @@ import (
 	"github.com/example/core-platform/apps/pulse/api/internal/api"
 	"github.com/example/core-platform/apps/pulse/api/internal/bond"
 	bondpg "github.com/example/core-platform/apps/pulse/api/internal/bond/postgres"
+	"github.com/example/core-platform/apps/pulse/api/internal/livetouch"
+	livetouchcore "github.com/example/core-platform/apps/pulse/api/internal/livetouch/core"
+	livetouchpg "github.com/example/core-platform/apps/pulse/api/internal/livetouch/postgres"
+	livetouchpulsemodules "github.com/example/core-platform/apps/pulse/api/internal/livetouch/pulsemodules"
 	"github.com/example/core-platform/apps/pulse/api/internal/mood"
 	moodcore "github.com/example/core-platform/apps/pulse/api/internal/mood/core"
 	moodpg "github.com/example/core-platform/apps/pulse/api/internal/mood/postgres"
@@ -102,7 +106,11 @@ func main() {
 
 	moodSvc := mood.NewService(moodpg.New(pool), pulsemodules.NewBondAdapter(bondSvc), moodcore.NewAnalyticsAdapter(cfg.CoreAPIURL, cfg.PulseAppID))
 
-	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc))
+	liveTouchRealtime := livetouchcore.NewRealtimeAdapter(rtbus.NewPublisher(redisClient))
+	liveTouchAnalytics := livetouchcore.NewAnalyticsAdapter(cfg.CoreAPIURL, cfg.PulseAppID)
+	liveTouchSvc := livetouch.NewService(livetouchpg.New(pool), livetouchpulsemodules.NewBondAdapter(bondSvc), liveTouchRealtime, liveTouchAnalytics, ratelimit.New(redisClient))
+
+	handler := otelx.Wrap(serviceName, api.New(cfg, pool, profileSvc, connectionsSvc, bondSvc, interactionsSvc, moodSvc, liveTouchSvc))
 
 	addr := env("PULSE_HTTP_ADDR", ":8096")
 	srv := &http.Server{Addr: addr, Handler: handler, ReadHeaderTimeout: 5 * time.Second}

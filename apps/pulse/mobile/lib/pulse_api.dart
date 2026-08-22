@@ -142,6 +142,75 @@ class PulseApi {
       );
 
   Future<void> removeCircleMember(String circleId, String userId) => _client.request('DELETE', '/v1/pulse/circles/$circleId/members/$userId');
+
+  /// The caller's current active Bond partner, if any - throws a real
+  /// 404 ApiError when unbonded. Live Touch (below) is gated on this.
+  Future<PulseBond> myBond() => _client.request(
+        'GET',
+        '/v1/pulse/bond',
+        decode: (json) => PulseBond.fromJson(json as Map<String, dynamic>),
+      );
+
+  /// Live Touch (product spec §21, Phase 10) - the flagship synchronous
+  /// two-way touch feature, gated on an active Bond (never merely a
+  /// Friend). The server resolves the caller's own current Bond partner
+  /// itself, so no target is passed here. Touch-start/touch-stop events
+  /// themselves never go through this HTTP client at all - once active,
+  /// both participants exchange them directly over the session's own
+  /// realtime channel (see LiveTouchScreen).
+  Future<PulseLiveTouchSession> inviteLiveTouch() => _client.request(
+        'POST',
+        '/v1/pulse/live-touch/sessions',
+        decode: (json) => PulseLiveTouchSession.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<PulseLiveTouchSession> acceptLiveTouch(String sessionId) => _client.request(
+        'POST',
+        '/v1/pulse/live-touch/sessions/$sessionId/accept',
+        decode: (json) => PulseLiveTouchSession.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<PulseLiveTouchSession> declineLiveTouch(String sessionId) => _client.request(
+        'POST',
+        '/v1/pulse/live-touch/sessions/$sessionId/decline',
+        decode: (json) => PulseLiveTouchSession.fromJson(json as Map<String, dynamic>),
+      );
+
+  Future<PulseLiveTouchSession> endLiveTouch(String sessionId) => _client.request(
+        'POST',
+        '/v1/pulse/live-touch/sessions/$sessionId/end',
+        decode: (json) => PulseLiveTouchSession.fromJson(json as Map<String, dynamic>),
+      );
+}
+
+class PulseBond {
+  final String otherUserId;
+  final String status;
+
+  PulseBond({required this.otherUserId, required this.status});
+
+  factory PulseBond.fromJson(Map<String, dynamic> json) => PulseBond(
+        otherUserId: json['otherUserId'] as String,
+        status: json['status'] as String,
+      );
+}
+
+class PulseLiveTouchSession {
+  final String id;
+  final String otherUserId;
+  final String status;
+  final String deliveryMode;
+  final String? channel;
+
+  PulseLiveTouchSession({required this.id, required this.otherUserId, required this.status, required this.deliveryMode, this.channel});
+
+  factory PulseLiveTouchSession.fromJson(Map<String, dynamic> json) => PulseLiveTouchSession(
+        id: json['id'] as String,
+        otherUserId: json['otherUserId'] as String,
+        status: json['status'] as String,
+        deliveryMode: json['deliveryMode'] as String,
+        channel: json['channel'] as String?,
+      );
 }
 
 class PulseConnection {

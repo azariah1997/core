@@ -92,6 +92,20 @@ http.Client _fakeBackend({bool failLogin = false}) {
         headers: {'content-type': 'application/json'},
       );
     }
+    if (req.url.path == '/v1/pulse/bond') {
+      return http.Response(
+        jsonEncode({'id': 'bond-1', 'otherUserId': 'user-2friend', 'status': 'active', 'requestedAt': '2026-01-01T00:00:00.000Z'}),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
+    }
+    if (req.url.path == '/v1/pulse/live-touch/sessions') {
+      return http.Response(
+        jsonEncode({'id': 'session-1', 'otherUserId': 'user-2friend', 'role': 'initiator', 'status': 'invited', 'deliveryMode': 'push', 'invitedAt': '2026-01-01T00:00:00.000Z'}),
+        201,
+        headers: {'content-type': 'application/json'},
+      );
+    }
     if (req.method == 'PUT' && req.url.path == '/v1/pulse/mood') {
       final body = jsonDecode(req.body) as Map<String, dynamic>;
       moodEmoji = body['emoji'] as String;
@@ -285,6 +299,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('user-2fr'), findsOneWidget);
+  });
+
+  testWidgets('tapping Live Touch invites the real bond partner and shows a waiting state', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: LoginPage(httpClient: _fakeBackend())));
+    await tester.tap(find.text('Sign in'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('liveTouchButton')), findsOneWidget);
+    expect(find.text('Live Touch'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('liveTouchButton')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Waiting for partner…'), findsOneWidget);
   });
 
   testWidgets('the Profile tab round-trips through the real pulse-api chain', (tester) async {

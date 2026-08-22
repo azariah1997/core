@@ -199,8 +199,8 @@
   <p class="sub">A global, non-verbal social communication app built entirely as a consumer of the Core Platform (identity, relationships, realtime, notifications, trust &amp; safety, billing, observability) — never a modification of it.</p>
   <p class="motto">"Feel it instead of reading it."</p>
   <div class="stats-bar">
-    <div class="stat-pill"><div class="num">10 / 18</div><div class="label">Phases complete (Audit → Close Friends &amp; Circles)</div></div>
-    <div class="stat-pill"><div class="num">5 / 10</div><div class="label">Pulse domain modules live</div></div>
+    <div class="stat-pill"><div class="num">11 / 18</div><div class="label">Phases complete (Audit → Live Touch)</div></div>
+    <div class="stat-pill"><div class="num">6 / 10</div><div class="label">Pulse domain modules live</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Core capabilities added for Pulse (presence endpoint, cross-user Send)</div></div>
     <div class="stat-pill"><div class="num">2</div><div class="label">Genuine Core gaps found</div></div>
     <div class="stat-pill"><div class="num">9</div><div class="label">Feature flags registered in Core</div></div>
@@ -327,6 +327,22 @@ Core Platform</pre>
   <h2>People &amp; Relationships</h2>
   <p class="hint">Spec §6-11. A person can have 0 or 1 romantic Bond, plus multiple Close Friends, Friends, and custom Circles — Pulse is not exclusively for couples.</p>
 
+  <div class="card">
+    <h3>Sample test accounts <span class="badge done">Live in local dev</span></h3>
+    <p>Five real Keycloak users in the <code>core</code> realm (password-grant, same convention as <code>demo</code>/<code>demo</code>), auto-provisioned into Core and wired together with real Pulse relationships via <code>apps/pulse/api</code>'s actual endpoints - not fixtures, not mocks. Re-creatable locally any time Keycloak/Postgres are reset by re-running the same admin-API + pulse-api calls documented in <code>apps/pulse/docs/ARCHITECTURE_AUDIT.md</code>.</p>
+    <table>
+      <thead><tr><th>User</th><th>Username / Password</th><th>Role in the sample graph</th></tr></thead>
+      <tbody>
+        <tr><td>Alice</td><td><code>pulsealice</code> / <code>pulsealice</code></td><td>Hub - Bonded with Bob, Close Friend with Carol, plain Friend with Dave, owns the "Close Circle" (Bob + Carol as members). Not connected to Erin.</td></tr>
+        <tr><td>Bob</td><td><code>pulsebob</code> / <code>pulsebob</code></td><td>Alice's Bond partner (also her plain Friend - Bond requires an existing Friend connection) and a Close Circle member.</td></tr>
+        <tr><td>Carol</td><td><code>pulsecarol</code> / <code>pulsecarol</code></td><td>Alice's Close Friend (asymmetric - only Alice has classified this side) and a Close Circle member.</td></tr>
+        <tr><td>Dave</td><td><code>pulsedave</code> / <code>pulsedave</code></td><td>Alice's plain Friend - deliberately <em>not</em> in the Close Circle, so it also proves Circle audience excludes real connections who aren't members.</td></tr>
+        <tr><td>Erin</td><td><code>pulseerin</code> / <code>pulseerin</code></td><td>Deliberately unconnected to anyone - the "stranger" case: every audience/visibility check should 404 or 403 for Erin.</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">Covers every Today's Mood audience type end to end: sign in as Alice, <code>PUT /v1/pulse/mood</code> with <code>partner_only</code> (Bob only) / <code>close_friends</code> (Carol only) / <code>all_connections</code> (Bob+Carol+Dave) / <code>selected_circles</code> with the Close Circle's real ID (Bob+Carol) / <code>custom_users</code> (any subset of real connections) / <code>private</code> (Alice only) - then confirm as each of Bob/Carol/Dave/Erin via <code>GET /v1/pulse/mood/{aliceUserId}</code>. Also the only pair that can test Live Touch (Phase 10) end to end, since it's Bond-gated: sign in as Alice on one device/browser tab and Bob on another, tap "Live Touch" from Alice's Home tab, then Accept from Bob's incoming-invite banner - both sides feel each other's touch in real time. Get real user IDs via <code>GET /v1/users/me</code>, or the mobile app's People/Home tabs (IDs are truncated to 8 characters in the UI).</p>
+  </div>
+
   <div class="grid2">
     <div class="card">
       <h3>Partner Bond <span class="badge pending">0 or 1</span></h3>
@@ -452,7 +468,7 @@ Core Platform</pre>
   <p class="hint">Full detail in <code>apps/pulse/docs/ARCHITECTURE_AUDIT.md</code>. Every row below was verified against real Core Platform source in this repository — nothing here was assumed from a module name.</p>
 
   <div class="card">
-    <h3>Pulse-owned domain modules (5 of 10 live)</h3>
+    <h3>Pulse-owned domain modules (6 of 10 live)</h3>
     <table>
       <thead><tr><th>Module</th><th>Owns</th><th>Depends on</th><th>Phase</th></tr></thead>
       <tbody>
@@ -461,7 +477,7 @@ Core Platform</pre>
         <tr><td><code>bond</code> <span class="badge done">Done</span></td><td>One-active-Bond invariant, Bond lifecycle</td><td>Core <code>relationships</code>, pulse-connections</td><td>3</td></tr>
         <tr><td><code>pulse-interactions</code> <span class="badge done">Done (live path)</span></td><td>Pulse/Knock/MoodResponse state machine</td><td>relationships, rtbus, analytics, ratelimit</td><td>4-7</td></tr>
         <tr><td><code>mood</code> <span class="badge done">Done</span></td><td>Today's Mood, audience, expiry</td><td>pulse-connections, bond</td><td>8</td></tr>
-        <tr><td><code>live-touch</code></td><td>Synchronous touch session lifecycle</td><td>bond, pulse-connections, pulse-interactions</td><td>10</td></tr>
+        <tr><td><code>live-touch</code> <span class="badge done">Done</span></td><td>Synchronous touch session lifecycle</td><td>bond</td><td>10</td></tr>
         <tr><td><code>signals</code></td><td>Custom touch-pattern storage</td><td>pulse-connections, bond</td><td>11</td></tr>
         <tr><td><code>moments</code></td><td>Saved-highlights timeline (references only, no chat)</td><td>pulse-interactions</td><td>12</td></tr>
         <tr><td><code>pulse-preferences</code></td><td>Notification detail level, mute</td><td>Core <code>notifications</code></td><td>13</td></tr>
@@ -543,7 +559,9 @@ DELETE /v1/pulse/signals/{id}
 
 POST   /v1/pulse/live-touch/sessions
 POST   /v1/pulse/live-touch/sessions/{id}/accept
+POST   /v1/pulse/live-touch/sessions/{id}/decline
 POST   /v1/pulse/live-touch/sessions/{id}/end
+GET    /v1/pulse/live-touch/sessions/{id}
 
 GET    /v1/pulse/moments
 POST   /v1/pulse/moments/{interactionId}/save
@@ -643,7 +661,7 @@ PUT    /v1/pulse/preferences</pre>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond acceptance - only the target may accept, mirroring Core's own relationships semantics</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>One-active-Bond policy - real Postgres unique-constraint enforcement, live-proven under genuine concurrency</li>
       <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond ending - frees the active-holder slot for a new bond</li>
-      <li><div class="box"></div>Bond-specific permissions (Live Touch, private touch language gating) - wired starting Phase 10/11, once those features exist</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Bond-specific permissions - Live Touch gating landed in Phase 10 (<code>bond.MyActiveBond</code> reused directly); private touch language gating is Phase 11's job</li>
     </ul>
   </div>
 
@@ -724,9 +742,18 @@ PUT    /v1/pulse/preferences</pre>
     </ul>
   </div>
 
-  <div class="card phase-card pending">
-    <h3><span class="phase-num">10</span>Live Touch <span class="badge pending">Pending</span></h3>
-    <p>Flagship feature: session invite/accept, realtime presence, bidirectional touch start/stop, disconnect handling, latency telemetry. Network/haptic quality is high priority.</p>
+  <div class="card phase-card done">
+    <h3><span class="phase-num">10</span>Live Touch <span class="badge done">Done</span></h3>
+    <p><code>POST /v1/pulse/live-touch/sessions</code>, <code>.../accept</code>, <code>.../decline</code>, <code>.../end</code>, <code>GET .../{id}</code> - the flagship synchronous two-way touch feature (spec §21), its own module (<code>internal/livetouch/</code>) rather than a third pulse-interactions Type, since it's gated on the caller's real, current active Bond partner specifically (spec §7) - a genuinely stricter shape than Pulse/Knock's Friend-or-Bond. Session lifecycle (invite/accept/decline/end, with a real server-computed duration) is a durable REST flow; touch events themselves are never persisted and never proxied through pulse-api - once active, both participants subscribe to a per-session realtime-gateway channel (<code>pulse:live-touch:{sessionId}</code>) using the mobile app's already-open WebSocket connection and exchange touch.start/touch.stop directly, the lowest-latency path this platform has. An unaccepted invite (2 min) or an abandoned active session (30 min) both expire lazily on the next read, never a background job - an honest proxy for "disconnect handled," since realtime-gateway's hub doesn't broadcast peer-disconnect events today (a documented platform limitation, not silently worked around). Live-validated end to end with the Phase 9 sample Bond pair (Alice ↔ Bob): Bond-gating correctly rejected an unbonded caller and resolved the real partner; an offline receiver got a real push notification; a real two-connection WebSocket round trip relayed touch.start/touch.stop directly between participants at ~790µs measured relay latency; accept/decline/end all transitioned state correctly including a real 409 on double-accept and 403 for a non-participant; duration was computed server-side, never fabricated; and invite-to-accept latency was recorded as a durable analytics property (spec §104's "latency measured"). Mobile ships a real "Live Touch" button (shown only against the real Bond partner), an incoming-invite banner with Accept/Decline, and a LiveTouchScreen with real local haptic feedback on both sides.</p>
+    <ul class="todo-list">
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Session invite/accept/decline/end, Bond-gated, real server-computed duration</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Touch events exchanged directly client-to-client over a per-session realtime channel - never proxied through pulse-api</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Invite delivery mode (live/push) decided once from a real presence check</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Lazy invite-timeout and abandoned-session expiry, no background job</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Invite-to-accept latency measured and recorded durably</li>
+      <li><div class="box" style="background:var(--ok);border-color:var(--ok)"></div>Mobile: Live Touch button, incoming-invite banner, real touch screen with haptics on both sides</li>
+      <li><div class="box"></div>True instant cross-device disconnect detection - needs a realtime-gateway hub change (peer-disconnect broadcast), not implemented this phase</li>
+    </ul>
   </div>
 
   <div class="card phase-card pending">

@@ -151,10 +151,31 @@ class _HomeShellState extends State<HomeShell> {
   String? _incomingBanner;
   String? _incomingInteractionId;
 
+  // Live Touch (product spec §21, Phase 10) - gated on a real active
+  // Bond, so the Home tab only offers it against the real bond partner.
+  String? _bondPartnerId;
+  // An incoming invite (someone else invited me) - Accept/Decline shown
+  // via _IncomingLiveTouchBanner, kept separate from the Pulse banner
+  // above since the two carry different actions.
+  String? _liveTouchInviteSessionId;
+  // My own outgoing invite, waiting on the other side to respond.
+  String? _liveTouchWaitingSessionId;
+  String? _liveTouchStatusMessage;
+
   @override
   void initState() {
     super.initState();
     _connectRealtime();
+    _loadBondPartner();
+  }
+
+  Future<void> _loadBondPartner() async {
+    try {
+      final bond = await widget.pulseApi.myBond();
+      if (mounted) setState(() => _bondPartnerId = bond.otherUserId);
+    } catch (_) {
+      // No active Bond - Live Touch simply stays unavailable, not an error.
+    }
   }
 
   Future<void> _connectRealtime() async {
@@ -215,6 +236,78 @@ class _HomeShellState extends State<HomeShell> {
           if (mounted) setState(() => _incomingBanner = null);
         });
         break;
+      // Live Touch session lifecycle (spec §21, Phase 10) - the touch
+      // events themselves never arrive here; they flow as plain
+      // 'message' events on the session's own channel, handled directly
+      // by LiveTouchScreen once both sides are subscribed.
+      case 'live_touch.invited':
+        _haptics.playKnock();
+        final data = m.data;
+        final sessionId = data is Map ? data['sessionId'] as String? : null;
+        setState(() => _liveTouchInviteSessionId = sessionId);
+        break;
+      case 'live_touch.accepted':
+        final data = m.data;
+        final sessionId = data is Map ? data['sessionId'] as String? : null;
+        final channel = data is Map ? data['channel'] as String? : null;
+        if (sessionId != null && sessionId == _liveTouchWaitingSessionId && channel != null && _conn != null) {
+          setState(() => _liveTouchWaitingSessionId = null);
+          _openLiveTouchScreen(sessionId, channel);
+        }
+        break;
+      case 'live_touch.declined':
+        final data = m.data;
+        final sessionId = data is Map ? data['sessionId'] as String? : null;
+        if (sessionId != null && sessionId == _liveTouchWaitingSessionId) {
+          setState(() {
+            _liveTouchWaitingSessionId = null;
+            _liveTouchStatusMessage = 'Live Touch declined';
+          });
+          Future.delayed(const Duration(seconds: 3), () {
+            if (mounted) setState(() => _liveTouchStatusMessage = null);
+          });
+        }
+        break;
+    }
+  }
+
+  void _openLiveTouchScreen(String sessionId, String channel) {
+    final conn = _conn;
+    if (conn == null) return;
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => LiveTouchScreen(pulseApi: widget.pulseApi, haptics: _haptics, conn: conn, sessionId: sessionId, channel: channel),
+    ));
+  }
+
+  Future<void> _inviteLiveTouch() async {
+    try {
+      final session = await widget.pulseApi.inviteLiveTouch();
+      setState(() => _liveTouchWaitingSessionId = session.id);
+    } catch (err) {
+      setState(() => _liveTouchStatusMessage = 'Could not start Live Touch: $err');
+    }
+  }
+
+  Future<void> _acceptLiveTouchInvite() async {
+    final sessionId = _liveTouchInviteSessionId;
+    if (sessionId == null) return;
+    setState(() => _liveTouchInviteSessionId = null);
+    try {
+      final session = await widget.pulseApi.acceptLiveTouch(sessionId);
+      if (session.channel != null) _openLiveTouchScreen(sessionId, session.channel!);
+    } catch (err) {
+      setState(() => _liveTouchStatusMessage = 'Could not accept Live Touch: $err');
+    }
+  }
+
+  Future<void> _declineLiveTouchInvite() async {
+    final sessionId = _liveTouchInviteSessionId;
+    if (sessionId == null) return;
+    setState(() => _liveTouchInviteSessionId = null);
+    try {
+      await widget.pulseApi.declineLiveTouch(sessionId);
+    } catch (_) {
+      // Best-effort - the invite will lazily time out server-side either way.
     }
   }
 
@@ -249,7 +342,13 @@ class _HomeShellState extends State<HomeShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      _HomeTab(pulseApi: widget.pulseApi, haptics: _haptics),
+      _HomeTab(
+        pulseApi: widget.pulseApi,
+        haptics: _haptics,
+        bondPartnerId: _bondPartnerId,
+        liveTouchWaiting: _liveTouchWaitingSessionId != null,
+        onInviteLiveTouch: _inviteLiveTouch,
+      ),
       _PeopleTab(pulseApi: widget.pulseApi),
       _MoodTab(pulseApi: widget.pulseApi),
       const _PlaceholderTab(title: 'Moments', subtitle: 'Saved shared moments, no chat — Phase 12'),
@@ -263,6 +362,15 @@ class _HomeShellState extends State<HomeShell> {
               _IncomingPulseBanner(
                 text: _incomingBanner!,
                 onPulseBack: _incomingInteractionId != null ? _pulseBack : null,
+              ),
+            if (_liveTouchInviteSessionId != null)
+              _IncomingLiveTouchBanner(onAccept: _acceptLiveTouchInvite, onDecline: _declineLiveTouchInvite),
+            if (_liveTouchStatusMessage != null)
+              Container(
+                width: double.infinity,
+                color: Theme.of(context).colorScheme.secondaryContainer,
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                child: Text(_liveTouchStatusMessage!, textAlign: TextAlign.center),
               ),
             Expanded(child: pages[_tab]),
           ],
@@ -317,6 +425,44 @@ class _IncomingPulseBanner extends StatelessWidget {
       );
 }
 
+/// The incoming Live Touch invite banner (spec §21) - Accept/Decline,
+/// never a Pulse-Back-style single action, since a session must be
+/// mutually agreed before either side can feel anything.
+class _IncomingLiveTouchBanner extends StatelessWidget {
+  final VoidCallback onAccept;
+  final VoidCallback onDecline;
+  const _IncomingLiveTouchBanner({required this.onAccept, required this.onDecline});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        color: Theme.of(context).colorScheme.tertiary,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Flexible(
+              child: Text('Your partner wants to Live Touch', textAlign: TextAlign.center, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(width: 10),
+            TextButton(
+              key: const Key('acceptLiveTouchButton'),
+              onPressed: onAccept,
+              style: TextButton.styleFrom(backgroundColor: Colors.white.withValues(alpha: 0.2), foregroundColor: Colors.white),
+              child: const Text('Accept'),
+            ),
+            const SizedBox(width: 6),
+            TextButton(
+              key: const Key('declineLiveTouchButton'),
+              onPressed: onDecline,
+              style: TextButton.styleFrom(foregroundColor: Colors.white),
+              child: const Text('Decline'),
+            ),
+          ],
+        ),
+      );
+}
+
 /// The "hold to Pulse" main screen (product spec §13, Phase 4). Press
 /// down starts a real Pulse (create+start in one call); release stops
 /// it - PulseStart/PulseStop, never a continuous stream (spec §15).
@@ -326,7 +472,19 @@ class _IncomingPulseBanner extends StatelessWidget {
 class _HomeTab extends StatefulWidget {
   final PulseApi pulseApi;
   final HapticEngine haptics;
-  const _HomeTab({required this.pulseApi, required this.haptics});
+  // Live Touch (spec §21) is Bond-gated - bondPartnerId is null when the
+  // caller has no active Bond, in which case the button never appears
+  // at all, regardless of which connection is selected.
+  final String? bondPartnerId;
+  final bool liveTouchWaiting;
+  final VoidCallback onInviteLiveTouch;
+  const _HomeTab({
+    required this.pulseApi,
+    required this.haptics,
+    this.bondPartnerId,
+    this.liveTouchWaiting = false,
+    required this.onInviteLiveTouch,
+  });
 
   @override
   State<_HomeTab> createState() => _HomeTabState();
@@ -518,6 +676,14 @@ class _HomeTabState extends State<_HomeTab> {
             onPressed: _holding ? null : _sendKnock,
             child: const Text('Knock'),
           ),
+          if (widget.bondPartnerId != null && target.otherUserId == widget.bondPartnerId) ...[
+            const SizedBox(height: 8),
+            FilledButton.tonal(
+              key: const Key('liveTouchButton'),
+              onPressed: _holding || widget.liveTouchWaiting ? null : widget.onInviteLiveTouch,
+              child: Text(widget.liveTouchWaiting ? 'Waiting for partner…' : 'Live Touch'),
+            ),
+          ],
           if (_lastResult != null) ...[
             const SizedBox(height: 12),
             Text(_lastResult!, style: TextStyle(color: Theme.of(context).colorScheme.primary)),
@@ -527,6 +693,142 @@ class _HomeTabState extends State<_HomeTab> {
             Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Live Touch (product spec §21, Phase 10) - the flagship synchronous
+/// two-way touch feature. Touch-start/touch-stop never go through
+/// pulse_api.dart's HTTP client at all: both participants publish and
+/// receive them directly over the session's own realtime-gateway
+/// channel via the already-connected RealtimeConn (see HomeShell's own
+/// single persistent connection), the lowest-latency path this platform
+/// has - live-validated end to end at sub-millisecond relay latency
+/// during this phase's own real-infrastructure testing.
+class LiveTouchScreen extends StatefulWidget {
+  final PulseApi pulseApi;
+  final HapticEngine haptics;
+  final RealtimeConn conn;
+  final String sessionId;
+  final String channel;
+  const LiveTouchScreen({
+    super.key,
+    required this.pulseApi,
+    required this.haptics,
+    required this.conn,
+    required this.sessionId,
+    required this.channel,
+  });
+
+  @override
+  State<LiveTouchScreen> createState() => _LiveTouchScreenState();
+}
+
+class _LiveTouchScreenState extends State<LiveTouchScreen> {
+  StreamSubscription<RealtimeMessage>? _sub;
+  bool _iAmTouching = false;
+  bool _partnerTouching = false;
+  bool _ended = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.conn.subscribe(widget.channel);
+    _sub = widget.conn.messages.listen(_onMessage);
+  }
+
+  void _onMessage(RealtimeMessage m) {
+    if (m.type == 'message' && m.channel == widget.channel) {
+      final data = m.data;
+      final touchType = data is Map ? data['type'] as String? : null;
+      if (touchType == 'touch.start') {
+        widget.haptics.playPulseStart();
+        if (mounted) setState(() => _partnerTouching = true);
+      } else if (touchType == 'touch.stop') {
+        widget.haptics.playPulseStop();
+        if (mounted) setState(() => _partnerTouching = false);
+      }
+      return;
+    }
+    if (m.type == 'live_touch.ended') {
+      final data = m.data;
+      final sessionId = data is Map ? data['sessionId'] as String? : null;
+      if (sessionId == widget.sessionId && mounted) {
+        setState(() => _ended = true);
+        Future.delayed(const Duration(seconds: 1), () {
+          if (mounted) Navigator.of(context).pop();
+        });
+      }
+    }
+  }
+
+  void _onTouchStart() {
+    setState(() => _iAmTouching = true);
+    widget.haptics.playPulseStart();
+    widget.conn.publish(widget.channel, {'type': 'touch.start'});
+  }
+
+  void _onTouchStop() {
+    setState(() => _iAmTouching = false);
+    widget.haptics.playPulseStop();
+    widget.conn.publish(widget.channel, {'type': 'touch.stop'});
+  }
+
+  Future<void> _end() async {
+    try {
+      await widget.pulseApi.endLiveTouch(widget.sessionId);
+    } catch (_) {
+      // Best-effort - leaving the screen ends the local experience
+      // either way; the session lazily times out server-side if the
+      // End call itself failed to land.
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  @override
+  void dispose() {
+    _sub?.cancel();
+    widget.conn.unsubscribe(widget.channel);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final glowing = _iAmTouching || _partnerTouching;
+    return Scaffold(
+      appBar: AppBar(title: const Text('Live Touch')),
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_ended)
+              const Text('Your partner ended the session')
+            else ...[
+              GestureDetector(
+                key: const Key('liveTouchArea'),
+                onTapDown: (_) => _onTouchStart(),
+                onTapUp: (_) => _onTouchStop(),
+                onTapCancel: _onTouchStop,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: glowing ? 220 : 180,
+                  height: glowing ? 220 : 180,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Theme.of(context).colorScheme.tertiary.withValues(alpha: glowing ? 0.4 : 0.15),
+                    border: Border.all(color: Theme.of(context).colorScheme.tertiary, width: glowing ? 4 : 2),
+                  ),
+                  child: Icon(Icons.favorite, size: glowing ? 96 : 72, color: Theme.of(context).colorScheme.tertiary),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(_partnerTouching ? 'Your partner is touching' : 'Hold to touch'),
+              const SizedBox(height: 24),
+              OutlinedButton(key: const Key('endLiveTouchButton'), onPressed: _end, child: const Text('End')),
+            ],
+          ],
+        ),
       ),
     );
   }
